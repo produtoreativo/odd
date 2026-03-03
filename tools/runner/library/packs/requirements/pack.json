@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "specialty": "requirements",
+  "created_at": "2026-03-03T03:08:55.063247Z",
+  "qdrant_collection": "kb__requirements",
+  "embed_model": "nomic-embed-text",
+  "inputs": {
+    "raw_dir": "/opt/library/raw/requirements",
+    "processed_dir": "/opt/library/processed/requirements"
+  },
+  "docs_indexed": [
+    {
+      "doc_id": "7fcb6b20e6851d94f854e9e017fb27bf27b34f4ee31ed4ecbf3ae9267b773632",
+      "points": 1221
+    }
+  ],
+  "interfaces": {
+    "rag": {
+      "limit_default": 8,
+      "payload_fields": [
+        "name",
+        "file",
+        "doc_id",
+        "chunk_id",
+        "chunk_index"
+      ]
+    }
+  },
+  "learning_base_ref": "/opt/library/packs/_learning_base/learning_base.json"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "specialty": "observability",
+  "rubrics": [
+    {
+      "id": "clarity",
+      "checks": [
+        "Sem termos vagos",
+        "Termos definidos quando necessários"
+      ]
+    },
+    {
+      "id": "verifiability",
+      "checks": [
+        "Critério observável ou testável",
+        "Condições de sucesso e falha claras"
+      ]
+    },
+    {
+      "id": "atomicity",
+      "checks": [
+        "Uma intenção por item",
+        "Sem conjunções escondendo múltiplos itens"
+      ]
+    },
+    {
+      "id": "traceability",
+      "checks": [
+        "Referenciar arquivo e chunk_id quando usado"
+      ]
+    }
+  ]
+}

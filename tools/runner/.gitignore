@@ -1,0 +1,4 @@
+airflow/logs/
+library/processed/
+library/cache/
+library/raw/

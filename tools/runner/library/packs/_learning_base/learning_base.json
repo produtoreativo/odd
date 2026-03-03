@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "tracks": [
+    {
+      "phase": "1-discovery/1.1-inception",
+      "outcomes": [
+        "Definir problema, objetivos e métricas de sucesso",
+        "Identificar stakeholders e atores",
+        "Mapear eventos do domínio e linguagem ubíqua",
+        "Gerar requisitos iniciais e critérios de aceite verificáveis"
+      ],
+      "agent_roles": [
+        "Gertrudes",
+        "Corrinha",
+        "Creuza"
+      ]
+    },
+    {
+      "phase": "1-discovery/1.2-elaboration",
+      "outcomes": [
+        "Refinar requisitos, restrições, suposições e riscos",
+        "Propor limites de domínio e contratos",
+        "Definir critérios testáveis e rastreabilidade"
+      ],
+      "agent_roles": [
+        "Gertrudes",
+        "Corrinha"
+      ]
+    },
+    {
+      "phase": "2-delivery/2.1-planning",
+      "outcomes": [
+        "Quebrar em slices verticais",
+        "Definir backlog priorizado",
+        "Especificar contratos e critérios de aceite"
+      ],
+      "agent_roles": [
+        "Corrinha"
+      ]
+    },
+    {
+      "phase": "2-delivery/2.2-refinement",
+      "outcomes": [
+        "Extrair Event Storming",
+        "Preparar base de eventos para ODD",
+        "Refinar contratos e observabilidade"
+      ],
+      "agent_roles": [
+        "Creuza"
+      ]
+    }
+  ]
+}

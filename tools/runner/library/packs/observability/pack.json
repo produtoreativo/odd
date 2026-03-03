@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "specialty": "observability",
+  "created_at": "2026-03-03T03:08:55.051374Z",
+  "qdrant_collection": "kb__observability",
+  "embed_model": "nomic-embed-text",
+  "inputs": {
+    "raw_dir": "/opt/library/raw/observability",
+    "processed_dir": "/opt/library/processed/observability"
+  },
+  "docs_indexed": [
+    {
+      "doc_id": "5e488518ab30a85d7783661196eeb7a44b3461ddfe6975ebe2a4038cd3326dd7",
+      "points": 433
+    }
+  ],
+  "interfaces": {
+    "rag": {
+      "limit_default": 8,
+      "payload_fields": [
+        "name",
+        "file",
+        "doc_id",
+        "chunk_id",
+        "chunk_index"
+      ]
+    }
+  },
+  "learning_base_ref": "/opt/library/packs/_learning_base/learning_base.json"
+}

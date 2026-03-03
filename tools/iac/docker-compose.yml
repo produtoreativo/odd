@@ -1,0 +1,221 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.4
+  environment:
+    # Executor estável em Docker
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+
+    # Postgres por IP fixo (elimina falha de DNS "postgres")
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@172.28.0.10:5432/airflow
+
+    # Celery broker/result backend (Redis também com IP fixo para ficar 100% sem DNS)
+    AIRFLOW__CELERY__BROKER_URL: redis://172.28.0.11:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@172.28.0.10:5432/airflow
+
+    # Airflow core
+    AIRFLOW__CORE__FERNET_KEY: "CHANGE_ME_FERNET_KEY"
+    AIRFLOW__WEBSERVER__SECRET_KEY: "CHANGE_ME_WEBSERVER_SECRET"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+    # Resiliência DB
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_PRE_PING: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: "1800"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: "5"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: "10"
+
+    # Chunking recomendado (chars)
+    CHUNK_SIZE: "3500"
+    CHUNK_OVERLAP: "350"          # ~10%
+
+    FINE_CHUNK_SIZE: "3500"
+    FINE_CHUNK_OVERLAP: "350"
+
+    COARSE_CHUNK_SIZE: "9000"
+    COARSE_CHUNK_OVERLAP: "700"
+
+    # Embeddings
+    EMBED_CONCURRENCY: "2"        # 2 é seguro em Docker Desktop
+    EMBED_TIMEOUT_SEC: "600"
+    EMBED_CACHE: "true"
+
+    # Qdrant
+    QDRANT_UPSERT_BATCH: "128"
+
+    # Payload no Qdrant
+    QDRANT_STORE_FULL_TEXT: "false" 
+    QDRANT_TEXT_PREVIEW_CHARS: "600"
+
+    # Limites (evita explosão de paralelismo)
+    # AIRFLOW__CORE__PARALLELISM: "6"
+    # AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "6"
+    # AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+
+    # Celery: evitar enfileirar várias tasks pesadas ao mesmo tempo
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: "1"
+    AIRFLOW__CELERY__WORKER_PREFETCH_MULTIPLIER: "1"
+    AIRFLOW__CELERY__TASK_ACKS_LATE: "true"
+
+    # Airflow: reduzir explosão de paralelismo
+    AIRFLOW__CORE__PARALLELISM: "2"
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+
+    # Zombie: dar margem para tasks pesadas
+    AIRFLOW__SCHEDULER__ZOMBIE_TASK_THRESHOLD: "1800"
+
+    # Biblioteca no container
+    LIBRARY_ROOT: /opt/library
+    LIBRARY_RAW: /opt/library/raw
+    LIBRARY_PROCESSED: /opt/library/processed
+    LIBRARY_PACKS: /opt/library/packs
+    LIBRARY_CACHE: /opt/library/cache
+
+    # Serviços internos
+    OLLAMA_BASE_URL: http://ollama:11434
+    OLLAMA_EMBED_MODEL: nomic-embed-text
+    QDRANT_HOST: qdrant
+    QDRANT_PORT: "6333"
+
+    # Deps do DAG (inclui EPUB)
+    _PIP_ADDITIONAL_REQUIREMENTS: "requests==2.32.3 qdrant-client==1.9.2 pyyaml==6.0.2 pypdf==4.2.0 EbookLib==0.18 beautifulsoup4==4.12.3"
+
+  volumes:
+    - ../runner/airflow/dags:/opt/airflow/dags
+    - ../runner/airflow/logs:/opt/airflow/logs
+    - ../runner/airflow/plugins:/opt/airflow/plugins
+    - ../runner/library:/opt/library
+  networks:
+    - ai_net
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "5432:5432"
+    networks:
+      ai_net:
+        ipv4_address: 172.28.0.10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      ai_net:
+        ipv4_address: 172.28.0.11
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - ai_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    networks:
+      - ai_net
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com || true
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    restart: unless-stopped
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    restart: unless-stopped
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    restart: unless-stopped
+    command: celery worker
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Opcional: UI para monitorar Celery
+  flower:
+    <<: *airflow-common
+    restart: unless-stopped
+    command: celery flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  toolbox:
+    image: python:3.12-slim
+    working_dir: /work
+    command: ["bash", "-lc", "sleep infinity"]
+    volumes:
+      - ../runner/library:/opt/library
+      - ../runner/scripts:/work/scripts
+    networks:
+      - ai_net
+
+volumes:
+  postgres_data:
+  ollama_data:
+  qdrant_data:
+
+networks:
+  ai_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
