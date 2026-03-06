@@ -1,0 +1,80 @@
+product: schola
+domain: prodops_education
+description: >
+  Produto para gerenciar turmas do curso de ProdOps, com matrícula e confirmação
+  de pagamento, integrando autenticação e cadastro ao sistema Certificare.
+
+integrations:
+  certificare:
+    purpose:
+      - login
+      - signup
+      - identity_provider
+    assumptions:
+      - Certificare fornece autenticação e retorna identidade do usuário (user_id, email, nome).
+      - Certificare permite redirecionamento de retorno para Schola (callback).
+  payments:
+    purpose:
+      - confirm_enrollment_payment
+    assumptions:
+      - Existe um sistema externo que enviará confirmação de pagamento para uma API do Schola.
+      - Confirmação de pagamento pode ser reenviada (necessário idempotência).
+
+core_entities:
+  course:
+    name: prodops
+  cohort:
+    description: turma do curso ProdOps
+    key_fields:
+      - cohort_id
+      - title
+      - start_date
+      - end_date
+      - enrollment_open
+      - capacity
+  enrollment:
+    description: matrícula do aluno em uma turma
+    key_fields:
+      - enrollment_id
+      - cohort_id
+      - student_id
+      - status
+      - requested_at
+      - confirmed_at
+      - payment_reference
+
+enrollment_status:
+  - requested
+  - awaiting_payment
+  - payment_confirmed
+  - confirmed
+  - cancelled
+  - expired
+
+non_functional:
+  - idempotency_for_payment_confirmation
+  - audit_trail_for_enrollment_lifecycle
+  - basic_rate_limit_on_payment_endpoint
+  - security_for_webhooks_signature_or_token
+  - traceability_requirements_to_events
+
+workflow_expectations:
+  artifacts:
+    requirements:
+      path: artifacts/01_requirements/requirements.json
+    specs:
+      path: artifacts/02_specs/
+      contracts:
+        openapi: artifacts/02_specs/contracts/openapi.yaml
+        asyncapi: artifacts/02_specs/contracts/asyncapi.yaml
+        events: artifacts/02_specs/contracts/events_contracts.yaml
+    odd:
+      path: artifacts/03_odd/
+      event_storming: artifacts/03_odd/event_storming.md
+      events_csv: artifacts/03_odd/odd_events.csv
+
+notes:
+  - Schola não cria identidade, apenas consome Certificare.
+  - Turmas são do curso ProdOps. Pode existir mais de uma turma ativa.
+  - Matrícula depende de confirmação externa de pagamento.
+  - A confirmação de pagamento deve localizar a matrícula correta e mudar o estado de forma segura.

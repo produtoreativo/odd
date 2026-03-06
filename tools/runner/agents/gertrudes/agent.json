@@ -1,0 +1,29 @@
+{
+  "name": "gertrudes",
+  "version": "1.0.0",
+  "role": "bench + requirements",
+  "description": "Compila conhecimento de indústria e transforma intenção do produto em requisitos verificáveis e não funcionais.",
+  "inputs": {
+    "intent_markdown": "0-intent/intention.md",
+    "context_json": "0-intent/context.json"
+  },
+  "outputs": {
+    "requirements_md": "1-requirements/requirements.md",
+    "assumptions_md": "1-requirements/assumptions.md",
+    "glossary_md": "1-requirements/glossary.md",
+    "non_functional_md": "1-requirements/non_functional.md",
+    "handoff_md": "1-requirements/handoff_to_corrinha.md"
+  },
+  "knowledge": {
+    "qdrant_collections": {
+      "coarse": ["odd__product__coarse", "odd__requirements__coarse"],
+      "fine": ["odd__product__fine", "odd__requirements__fine"]
+    },
+    "topk_coarse": 8,
+    "topk_fine": 18
+  },
+  "models": {
+    "embed_model": "nomic-embed-text",
+    "generate_model": "llama3.1:8b"
+  }
+}

@@ -37,7 +37,7 @@ x-airflow-common: &airflow-common
 
     # Embeddings
     EMBED_CONCURRENCY: "2"        # 2 é seguro em Docker Desktop
-    EMBED_TIMEOUT_SEC: "600"
+    EMBED_TIMEOUT_SEC: "1600"
     EMBED_CACHE: "true"
 
     # Qdrant
@@ -53,17 +53,17 @@ x-airflow-common: &airflow-common
     # AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
 
     # Celery: evitar enfileirar várias tasks pesadas ao mesmo tempo
-    AIRFLOW__CELERY__WORKER_CONCURRENCY: "1"
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: "2"
     AIRFLOW__CELERY__WORKER_PREFETCH_MULTIPLIER: "1"
     AIRFLOW__CELERY__TASK_ACKS_LATE: "true"
 
     # Airflow: reduzir explosão de paralelismo
-    AIRFLOW__CORE__PARALLELISM: "2"
-    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+    AIRFLOW__CORE__PARALLELISM: "4"
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
     AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
 
     # Zombie: dar margem para tasks pesadas
-    AIRFLOW__SCHEDULER__ZOMBIE_TASK_THRESHOLD: "1800"
+    AIRFLOW__SCHEDULER__ZOMBIE_TASK_THRESHOLD: "5800"
 
     # Biblioteca no container
     LIBRARY_ROOT: /opt/library
@@ -73,7 +73,8 @@ x-airflow-common: &airflow-common
     LIBRARY_CACHE: /opt/library/cache
 
     # Serviços internos
-    OLLAMA_BASE_URL: http://ollama:11434
+    #OLLAMA_BASE_URL: http://ollama:11434
+    OLLAMA_BASE_URL: http://host.docker.internal:11434
     OLLAMA_EMBED_MODEL: nomic-embed-text
     QDRANT_HOST: qdrant
     QDRANT_PORT: "6333"
@@ -86,6 +87,9 @@ x-airflow-common: &airflow-common
     - ../runner/airflow/logs:/opt/airflow/logs
     - ../runner/airflow/plugins:/opt/airflow/plugins
     - ../runner/library:/opt/library
+    - ../runner/products:/opt/products
+    - ../runner/scripts:/opt/scripts
+    - ../runner/agents:/opt/agents
   networks:
     - ai_net
   depends_on:
@@ -124,15 +128,15 @@ services:
       ai_net:
         ipv4_address: 172.28.0.11
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    networks:
-      - ai_net
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   networks:
+  #     - ai_net
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -205,13 +209,16 @@ services:
     volumes:
       - ../runner/library:/opt/library
       - ../runner/scripts:/work/scripts
+      - ../runner/products:/opt/products
+      - ../runner/scripts:/opt/scripts
+      - ../runner/agents:/opt/agents
     networks:
       - ai_net
 
 volumes:
   postgres_data:
-  ollama_data:
   qdrant_data:
+  # ollama_data:
 
 networks:
   ai_net:

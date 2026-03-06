@@ -29,6 +29,8 @@ docker-compose up -d
 # Se precisar restartar somente o airflow
 docker-compose restart airflow-worker airflow-scheduler airflow-webserver
 
+# Verificar se tem erros nos DAGs
+docker-compose exec airflow-scheduler bash -lc "airflow dags list-import-errors"
 
 docker-compose exec airflow-scheduler getent hosts postgres || true
 docker-compose exec airflow-scheduler bash -lc "python - <<'PY'
@@ -68,3 +70,17 @@ Qdrant (kb__requirements etc)
 Agente faz search top_k
     ↓
 LLM gera output fundamentado
+
+## Criar documentação 
+
+```sh
+docker compose exec toolbox bash -lc \
+"python /work/scripts/agents/orchestrator.py /opt/products/new/schola"
+```
+
+### Rodar a Gertrudes manualmente
+
+```sh
+docker-compose exec airflow-scheduler bash -lc \
+"python /opt/scripts/agents/gertrudes_run.py --product schola --root /opt/products"
+```

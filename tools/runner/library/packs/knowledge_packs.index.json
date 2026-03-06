@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-03-03T14:37:51.941556Z",
+  "specialties": {
+    "product": {
+      "count": 2,
+      "processed": [
+        "/opt/library/processed/product/49ec4dac46f244fe9cd2a3e94bbd284020a51a471fd3426207195d5873d6999c.json",
+        "/opt/library/processed/product/48510010575960dbc83a4fdbdee410ff47eadbfa2702a47b27739ecc0a48ccb6.json"
+      ],
+      "fine_chunks_total": 436
+    },
+    "eventing": {
+      "count": 2,
+      "processed": [
+        "/opt/library/processed/eventing/f5ff2b04c6837731139811ac0e8688f04a297f02932444a5f3019d2773f21d9c.json",
+        "/opt/library/processed/eventing/c16350df8ca48c36da9cbd6105a0c2277330af311655ec4357eb1b87170f9cb5.json"
+      ],
+      "fine_chunks_total": 269
+    },
+    "architecture": {
+      "count": 2,
+      "processed": [
+        "/opt/library/processed/architecture/fa2c7a1150ffa503396c0a39d471035cb3245a8c3a3d1a54f470f666e9278c9d.json",
+        "/opt/library/processed/architecture/410089726149721dead1ec4f131589f503868802dae728dd3f9a43bca4226bd9.json"
+      ],
+      "fine_chunks_total": 907
+    },
+    "requirements": {
+      "count": 2,
+      "processed": [
+        "/opt/library/processed/requirements/21f0f2b6bff316514e8afbf9322abac9a91ed69f1b1e7bb93f6a3fc61ef46be4.json",
+        "/opt/library/processed/requirements/e24b157077464a4f5f7cb701920efdde51467ec5543928755e5ccb5ca197012a.json"
+      ],
+      "fine_chunks_total": 1016
+    },
+    "observability": {
+      "count": 1,
+      "processed": [
+        "/opt/library/processed/observability/a007c2755583af47699b492bff2fa56ce8804c1910fe49b845cc22136b37bb0b.json"
+      ],
+      "fine_chunks_total": 178
+    },
+    "testing": {
+      "count": 1,
+      "processed": [
+        "/opt/library/processed/testing/769674483f64f993bb05547a26a69a3ff6ff2bcff2552f10ef1a9c044cf67f49.json"
+      ],
+      "fine_chunks_total": 195
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "produto": "schola",
+  "integracoes": {
+    "idp": "certificare",
+    "login_e_cadastro": "delegado para certificare",
+    "pagamentos": "recebe confirmacao via webhook"
+  },
+  "dominios": [
+    "turmas",
+    "matriculas",
+    "pagamentos"
+  ],
+  "atores": [
+    "aluno",
+    "admin_prodops",
+    "sistema_pagamento"
+  ],
+  "restricoes": [
+    "nao duplicar cadastro local",
+    "confirmacao de pagamento deve ser idempotente",
+    "toda confirmacao deve ser auditavel"
+  ],
+  "sucesso": [
+    "matricula confirmada apos pagamento",
+    "admin consegue criar e listar turmas"
+  ]
+}

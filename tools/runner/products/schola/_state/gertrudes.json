@@ -1,0 +1,18 @@
+{
+  "agent": "gertrudes",
+  "product": "schola",
+  "status": "ok",
+  "input_hash": "af1fce54a5c77bfe2cd78a7784b38642576ac0193f529f9ad5f5915b9567d94e",
+  "generated_at": "2026-03-05T20:50:32Z",
+  "ollama_url": "http://host.docker.internal:11434",
+  "embed_model": "nomic-embed-text",
+  "gen_model": "llama3.1:8b",
+  "agent_dir": "/opt/agents/gertrudes",
+  "outputs": {
+    "requirements": "/opt/products/schola/1-requirements/1-requirements/requirements.md",
+    "non_functional": "/opt/products/schola/1-requirements/1-requirements/non_functional.md",
+    "glossary": "/opt/products/schola/1-requirements/1-requirements/glossary.md",
+    "assumptions": "/opt/products/schola/1-requirements/1-requirements/assumptions.md",
+    "handoff": "/opt/products/schola/1-requirements/1-requirements/handoff_to_corrinha.md"
+  }
+}

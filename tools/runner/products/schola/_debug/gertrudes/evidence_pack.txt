@@ -1,0 +1,110 @@
+## Evidências: odd__product__coarse
+- score=0.6003 doc=inspired-marty-cagan.pdf specialty=product level=coarse
+  
+- score=0.5981 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+- score=0.5979 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+- score=0.5958 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+- score=0.5926 doc=inspired-marty-cagan.pdf specialty=product level=coarse
+  
+- score=0.5917 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+- score=0.5916 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+- score=0.5915 doc=user-story-mapping-jeff-patton.pdf specialty=product level=coarse
+  
+
+## Evidências: odd__requirements__coarse
+- score=0.6233 doc=mastering-the-requirements-process.pdf specialty=requirements level=coarse
+  
+- score=0.6083 doc=software-requirements-wiegers.epub specialty=requirements level=coarse
+  
+- score=0.6060 doc=mastering-the-requirements-process.pdf specialty=requirements level=coarse
+  
+- score=0.6058 doc=software-requirements-wiegers.epub specialty=requirements level=coarse
+  
+- score=0.6055 doc=software-requirements-wiegers.epub specialty=requirements level=coarse
+  
+- score=0.6047 doc=mastering-the-requirements-process.pdf specialty=requirements level=coarse
+  
+- score=0.6046 doc=mastering-the-requirements-process.pdf specialty=requirements level=coarse
+  
+- score=0.6037 doc=software-requirements-wiegers.epub specialty=requirements level=coarse
+  
+
+## Evidências: odd__product__fine
+- score=0.6168 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5970 doc=user-story-mapping-jeff-patton.pdf specialty=product level=fine
+  
+- score=0.5969 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5967 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5948 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5944 doc=user-story-mapping-jeff-patton.pdf specialty=product level=fine
+  
+- score=0.5939 doc=user-story-mapping-jeff-patton.pdf specialty=product level=fine
+  
+- score=0.5932 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5912 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5896 doc=user-story-mapping-jeff-patton.pdf specialty=product level=fine
+  
+- score=0.5893 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5889 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5889 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5885 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5883 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5880 doc=user-story-mapping-jeff-patton.pdf specialty=product level=fine
+  
+- score=0.5879 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+- score=0.5868 doc=inspired-marty-cagan.pdf specialty=product level=fine
+  
+
+## Evidências: odd__requirements__fine
+- score=0.6138 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6125 doc=mastering-the-requirements-process.pdf specialty=requirements level=fine
+  
+- score=0.6107 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6099 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6099 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6086 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6084 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6062 doc=mastering-the-requirements-process.pdf specialty=requirements level=fine
+  
+- score=0.6056 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6051 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6050 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6042 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6039 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6033 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6030 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6029 doc=software-requirements-wiegers.epub specialty=requirements level=fine
+  
+- score=0.6017 doc=mastering-the-requirements-process.pdf specialty=requirements level=fine
+  
+- score=0.6014 doc=software-requirements-wiegers.epub specialty=requirements level=fine
