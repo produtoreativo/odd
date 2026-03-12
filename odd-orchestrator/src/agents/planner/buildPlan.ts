@@ -1,7 +1,14 @@
-import { DashboardGroupPlan, DashboardPlan, DashboardWidgetPlan, EventStormingRow } from '../../shared/types.js';
-import { suggestStageTitle } from './ollama.js';
+import { DashboardPlan, DashboardGroupPlan, DashboardWidgetPlan, EventStormingRow } from '../../shared/types.js';
+import { generateDashboardPlan, toDisplayTitle } from './ollama.js';
 
 export async function buildDashboardPlan(rows: EventStormingRow[], dashboardTitle: string): Promise<DashboardPlan> {
+  const llmPlan = await generateDashboardPlan(rows, dashboardTitle);
+  if (llmPlan) return llmPlan;
+
+  return buildDashboardPlanDeterministic(rows, dashboardTitle);
+}
+
+function buildDashboardPlanDeterministic(rows: EventStormingRow[], dashboardTitle: string): DashboardPlan {
   const sorted = [...rows].sort((a, b) => a.ordem - b.ordem);
   const groupsMap = new Map<string, EventStormingRow[]>();
 
@@ -13,7 +20,7 @@ export async function buildDashboardPlan(rows: EventStormingRow[], dashboardTitl
 
   const groups: DashboardGroupPlan[] = [];
   for (const [stage, stageRows] of groupsMap.entries()) {
-    const title = await suggestStageTitle(stage);
+    const title = toDisplayTitle(stage);
     const widgets: DashboardWidgetPlan[] = stageRows.map((row) => ({
       id: row.eventKey,
       title: row.eventTitle,
