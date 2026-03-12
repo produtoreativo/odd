@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+generated/*.json
+terraform/generated/*.json

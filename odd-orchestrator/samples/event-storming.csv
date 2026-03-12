@@ -1,0 +1,4 @@
+ordem,event_key,event_title,stage,actor,service,tags,dashboard_widget,query_hint
+1,analyst_entry_approved,Analyst Entry Approved,triagem,analyst,risk-analysis,"journey:inspection,domain:risk",event_stream,"tags:(event_key:analyst_entry_approved service:risk-analysis source:odd)"
+2,inspection_requested,Inspection Requested,solicitacao,system,inspection-api,"journey:inspection,domain:field",event_stream,"tags:(event_key:inspection_requested service:inspection-api source:odd)"
+3,inspection_completed,Inspection Completed,execucao,inspector,inspection-api,"journey:inspection,domain:field",event_stream,"tags:(event_key:inspection_completed service:inspection-api source:odd)"

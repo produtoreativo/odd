@@ -1,0 +1,20 @@
+{
+  "name": "odd-datadog-agents",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Minimal TypeScript agents for ODD Event Storming to Datadog dashboards and synthetic custom events, with CSV/XLSX support.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "planner": "tsx src/agents/planner/index.ts",
+    "applier": "tsx src/agents/applier/index.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}
