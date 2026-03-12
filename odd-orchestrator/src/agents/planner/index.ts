@@ -14,7 +14,7 @@ async function main(): Promise<void> {
 
   const rows = await readEventStormingFile(input);
   const plan = await buildDashboardPlan(rows, dashboardTitle);
-  const terraformJson = buildDatadogDashboardTerraform(plan);
+  const terraformJson = await buildDatadogDashboardTerraform(plan);
 
   await writeJsonFile(path.join(outputDir, 'plan.json'), plan);
   await writeJsonFile(path.join(outputDir, 'custom-events.json'), plan.customEvents);
