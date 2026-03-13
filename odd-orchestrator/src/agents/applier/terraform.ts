@@ -6,17 +6,18 @@ export async function runTerraform(dir: string, dryRun: boolean): Promise<string
   const appKey = process.env.DD_APP_KEY;
 
   const commands = [
-    // ['terraform', ['init']],x`
     ['terraform', 
       ['apply', 
         '-auto-approve', 
-        `-var="datadog_api_key=${apiKey}"`, 
-        `-var="datadog_app_key=${appKey}"`
+        '-var',
+        `datadog_api_key=${apiKey}`,
+        '-var',
+        `datadog_app_key=${appKey}`
       ]
     ]
   ] as const;
 
-// terraform apply -auto-approve -var="datadog_api_key=$DD_API_KEY" -var="datadog_app_key=$DD_APP_KEY"
+// terraform apply -auto-approve -var datadog_api_key=$DD_API_KEY -var datadog_app_key=$DD_APP_KEY
 
   const executed: string[] = [];
   for (const [cmd, args] of commands) {

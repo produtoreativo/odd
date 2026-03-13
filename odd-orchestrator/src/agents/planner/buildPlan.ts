@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { DashboardPlan, EventStormingRow } from '../../shared/types.js';
 import { callOllama } from './ollama.js';
 
@@ -46,24 +48,21 @@ const responseFormat = {
   required: ['dashboardTitle', 'groups', 'customEvents']
 };
 
-function buildPrompt(rows: EventStormingRow[], dashboardTitle: string): string {
-  return [
-    'Você é especialista em DataDog Dashboard e Event Storming.',
-    'Receba as linhas de Event Storming abaixo e gere um DashboardPlan JSON completo.',
-    '',
-    'Regras:',
-    '- Agrupe as linhas pelo campo "stage", mantendo a ordem do campo "ordem" dentro de cada grupo.',
-    '- Para cada grupo, gere um título legível em português para o stage.',
-    '- Cada linha vira um widget: id = eventKey, title = eventTitle, widgetType = dashboardWidget (apenas "event_stream" ou "note"), query = queryHint, stage = stage.',
-    '- customEvents: um por linha. title = eventKey. text = "Business event emitted from Event Storming row {ordem}". tags deve incluir: event_key:{eventKey}, stage:{stage}, actor:{actor}, service:{service}, todas as tags da linha, e "source:odd".',
-    `- dashboardTitle deve ser exatamente: ${JSON.stringify(dashboardTitle)}`,
-    '- Não invente linhas nem omita nenhuma. Cada linha de entrada deve aparecer como exatamente um widget e um customEvent.',
-    '',
-    'Linhas de entrada:',
-    JSON.stringify(rows, null, 2),
-    '',
-    'Responda APENAS com o JSON do DashboardPlan.'
-  ].join('\n');
+const promptTemplatePath = path.join(__dirname, 'buildPlan.prompt.md');
+let promptTemplatePromise: Promise<string> | null = null;
+
+async function loadPromptTemplate(): Promise<string> {
+  if (!promptTemplatePromise) {
+    promptTemplatePromise = readFile(promptTemplatePath, 'utf-8');
+  }
+  return promptTemplatePromise;
+}
+
+async function buildPrompt(rows: EventStormingRow[], dashboardTitle: string): Promise<string> {
+  const template = await loadPromptTemplate();
+  return template
+    .replaceAll('{{DASHBOARD_TITLE_JSON}}', JSON.stringify(dashboardTitle))
+    .replaceAll('{{EVENT_STORMING_ROWS_JSON}}', JSON.stringify(rows, null, 2));
 }
 
 function validate(obj: unknown, inputRows: EventStormingRow[]): asserts obj is DashboardPlan {
@@ -106,7 +105,8 @@ function validate(obj: unknown, inputRows: EventStormingRow[]): asserts obj is D
 }
 
 export async function buildDashboardPlan(rows: EventStormingRow[], dashboardTitle: string): Promise<DashboardPlan> {
-  const result = await callOllama(buildPrompt(rows, dashboardTitle), responseFormat);
+  const prompt = await buildPrompt(rows, dashboardTitle);
+  const result = await callOllama(prompt, responseFormat);
   validate(result, rows);
   return result;
 }

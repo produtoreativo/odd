@@ -106,6 +106,7 @@ npm run applier -- \
 - `DD_APP_KEY`
 - `DD_SITE=datadoghq.com`
 - `DD_API_BASE_URL=https://api.datadoghq.com`
+- `DD_EVENT_BATCH_SIZE=10`
 
 ## Estrutura
 
@@ -124,5 +125,4 @@ generated/
 
 - O dashboard gerado usa `datadog_dashboard_json` em Terraform.
 - Os eventos sintéticos são preparados para `POST /api/v1/events`.
-- Não há lockfile no projeto, conforme pedido.
 - O parser aceita tanto CSV quanto XLSX; no caso do XLSX, usa a primeira aba não vazia.

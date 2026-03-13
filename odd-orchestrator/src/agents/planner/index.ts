@@ -1,7 +1,6 @@
-import { copyFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs, requireStringArg } from '../../shared/cli.js';
-import { ensureDir, writeJsonFile } from '../../shared/fs.js';
+import { writeJsonFile } from '../../shared/fs.js';
 import { readEventStormingFile } from '../../shared/spreadsheet.js';
 import { buildDashboardPlan } from './buildPlan.js';
 import { buildDatadogDashboardTerraform } from './datadogTf.js';
@@ -32,12 +31,6 @@ async function main(): Promise<void> {
   await writeJsonFile(path.join(outputDir, 'custom-events.json'), plan.customEvents);
 
   await writeJsonFile(path.join(terraformDir, 'generated', runId+'-dashboard.auto.tf.json'), terraformJson);
-
-  // const commonTfDir = path.resolve('terraform', 'common');
-  // const tfOutputDir = path.join(outputDir, 'terraform');
-  // await ensureDir(tfOutputDir);
-  // const commonFiles = await readdir(commonTfDir);
-  // await Promise.all(commonFiles.map(f => copyFile(path.join(commonTfDir, f), path.join(tfOutputDir, f))));
 
   console.log(`Planner finalizado. Eventos: ${rows.length}`);
   console.log(`Output: ${outputDir}`);
