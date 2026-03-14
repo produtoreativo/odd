@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DashboardPlan } from '../../shared/types.js';
-import { callOllama } from './ollama.js';
+import { LlmExecutor } from '../../shared/llm/index.js';
 
-function produceResponseFormat() {
+function produceResponseFormat(dashboardTitle: string) {
 
-  const dashboardName = 'event_storming_dashboard-2';
+  const dashboardName = `${dashboardTitle}`;
 
   return {
     type: 'object',
@@ -52,7 +52,7 @@ async function buildPrompt(plan: DashboardPlan): Promise<string> {
     .replaceAll('{{DASHBOARD_PLAN_JSON}}', JSON.stringify(plan, null, 2));
 }
 
-function validate(obj: unknown): asserts obj is Record<string, unknown> {
+function validate(obj: unknown, dashboardName: string): asserts obj is Record<string, unknown> {
   if (!obj || typeof obj !== 'object') throw new Error('LLM returned non-object');
   const root = obj as Record<string, unknown>;
 
@@ -62,8 +62,8 @@ function validate(obj: unknown): asserts obj is Record<string, unknown> {
   const ddJson = (resource as Record<string, unknown>).datadog_dashboard_json;
   if (!ddJson || typeof ddJson !== 'object') throw new Error('Missing datadog_dashboard_json');
 
-  const esDashboard = (ddJson as Record<string, unknown>).event_storming_dashboard;
-  if (!esDashboard || typeof esDashboard !== 'object') throw new Error('Missing event_storming_dashboard');
+  const esDashboard = (ddJson as Record<string, unknown>)[dashboardName];
+  if (!esDashboard || typeof esDashboard !== 'object') throw new Error(`Missing ${dashboardName}`);
 
   const dashboardStr = (esDashboard as Record<string, unknown>).dashboard;
   if (typeof dashboardStr !== 'string') throw new Error('dashboard field is not a string');
@@ -81,12 +81,12 @@ function validate(obj: unknown): asserts obj is Record<string, unknown> {
   }
 }
 
-export async function buildDatadogDashboardTerraform(plan: DashboardPlan): Promise<Record<string, unknown>> {
+export async function buildDatadogDashboardTerraform(llm: LlmExecutor, plan: DashboardPlan): Promise<Record<string, unknown>> {
 
-  const responseFormat = produceResponseFormat();
+  const responseFormat = produceResponseFormat(plan.dashboardTitle);
 
   const prompt = await buildPrompt(plan);
-  const result = await callOllama(prompt, responseFormat);
-  validate(result);
+  const result = await llm.call(prompt, responseFormat);
+  validate(result, plan.dashboardTitle);
   return result;
 }

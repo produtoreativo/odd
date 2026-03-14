@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DashboardPlan, EventStormingRow } from '../../shared/types.js';
-import { callOllama } from './ollama.js';
+import { LlmExecutor } from '../../shared/llm/index.js';
 
 const responseFormat = {
   type: 'object',
@@ -104,9 +104,9 @@ function validate(obj: unknown, inputRows: EventStormingRow[]): asserts obj is D
   }
 }
 
-export async function buildDashboardPlan(rows: EventStormingRow[], dashboardTitle: string): Promise<DashboardPlan> {
+export async function buildDashboardPlan(llm: LlmExecutor, rows: EventStormingRow[], dashboardTitle: string): Promise<DashboardPlan> {
   const prompt = await buildPrompt(rows, dashboardTitle);
-  const result = await callOllama(prompt, responseFormat);
+  const result = await llm.call(prompt, responseFormat);
   validate(result, rows);
   return result;
 }

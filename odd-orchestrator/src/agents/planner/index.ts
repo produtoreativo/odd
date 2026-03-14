@@ -2,6 +2,7 @@ import path from 'node:path';
 import { parseArgs, requireStringArg } from '../../shared/cli.js';
 import { writeJsonFile } from '../../shared/fs.js';
 import { readEventStormingFile } from '../../shared/spreadsheet.js';
+import { Ollama, Model } from '../../shared/llm/index.js';
 import { buildDashboardPlan } from './buildPlan.js';
 import { buildDatadogDashboardTerraform } from './datadogTf.js';
 
@@ -23,9 +24,12 @@ async function main(): Promise<void> {
   const runId = buildRunId();
   const outputDir = path.join(baseOutput, `${inputName}_${runId}`);
 
+  const plannerLlm = new Ollama(Model.Qwen25Coder);
+  const terraformLlm = new Ollama(Model.Qwen25Coder);
+
   const rows = await readEventStormingFile(input);
-  const plan = await buildDashboardPlan(rows, dashboardTitle);
-  const terraformJson = await buildDatadogDashboardTerraform(plan);
+  const plan = await buildDashboardPlan(plannerLlm, rows, dashboardTitle);
+  const terraformJson = await buildDatadogDashboardTerraform(terraformLlm, plan);
 
   await writeJsonFile(path.join(outputDir, 'plan.json'), plan);
   await writeJsonFile(path.join(outputDir, 'custom-events.json'), plan.customEvents);
