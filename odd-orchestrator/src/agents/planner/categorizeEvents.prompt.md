@@ -17,6 +17,14 @@ Critérios para classificação:
 
 Considere o contexto completo: eventKey, eventTitle, tags e stage.
 
+Regras de determinismo:
+- Preserve todos os campos exatamente como chegaram.
+- Não reescreva eventKey, eventTitle, stage, actor, service, tags, dashboardWidget ou queryHint.
+- Cada evento deve aparecer exatamente uma vez, em apenas uma categoria.
+- Em caso de ambiguidade, prefira "problem" se o evento indicar bloqueio, degradação, rejeição, timeout ou alerta operacional.
+- Em caso de ambiguidade entre tentativa e sucesso, prefira "normal" apenas quando houver evidência explícita de conclusão bem-sucedida.
+- Mantenha a ordem original por "ordem" dentro de cada categoria.
+
 Linhas de entrada:
 {{EVENT_STORMING_ROWS_JSON}}
 

@@ -1,4 +1,8 @@
-export type SupportedWidget = 'event_stream' | 'note';
+export type SupportedWidget = 'event_stream' | 'note' | 'query_value' | 'timeseries';
+export type DashboardSectionType = 'problems' | 'normal';
+export type DashboardBandId = 'hero_alert' | 'failure_kpis' | 'failure_trends' | 'success_kpis' | 'success_trends';
+export type DashboardVisualRole = 'hero_alert' | 'kpi' | 'trend';
+export type DashboardPalette = 'alert' | 'warning' | 'success' | 'neutral';
 
 export type EventStormingRow = {
   ordem: number;
@@ -20,21 +24,20 @@ export type CategorizedEvents = {
 export type DashboardWidgetPlan = {
   id: string;
   title: string;
-  widgetType: SupportedWidget;
+  widgetType: Extract<SupportedWidget, 'query_value' | 'timeseries'>;
   query: string;
   stage: string;
+  sectionType: DashboardSectionType;
+  sourceEventKeys: string[];
+  visualRole: DashboardVisualRole;
+  palette: DashboardPalette;
 };
 
-export type DashboardGroupPlan = {
-  stage: string;
+export type DashboardBandPlan = {
+  id: DashboardBandId;
   title: string;
+  sectionType: DashboardSectionType;
   widgets: DashboardWidgetPlan[];
-};
-
-export type DashboardSectionPlan = {
-  sectionType: 'problems' | 'normal';
-  sectionTitle: string;
-  groups: DashboardGroupPlan[];
 };
 
 export type CustomEventPayload = {
@@ -45,6 +48,6 @@ export type CustomEventPayload = {
 
 export type DashboardPlan = {
   dashboardTitle: string;
-  sections: DashboardSectionPlan[];
+  bands: DashboardBandPlan[];
   customEvents: CustomEventPayload[];
 };

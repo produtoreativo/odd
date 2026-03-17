@@ -26,17 +26,16 @@ async function main(): Promise<void> {
   const outputDir = path.join(baseOutput, `${inputName}_${runId}`);
 
   const plannerLlm = new Ollama(Model.Qwen25Coder);
-  const terraformLlm = new Ollama(Model.Qwen25Coder);
 
   const rows = await readEventStormingFile(input);
   const categorized = await categorizeEvents(plannerLlm, rows);
   const plan = await buildDashboardPlan(plannerLlm, categorized, dashboardTitle);
-  const terraformJson = await buildDatadogDashboardTerraform(terraformLlm, plan);
+  const terraformJson = await buildDatadogDashboardTerraform(plan);
 
   await writeJsonFile(path.join(outputDir, 'plan.json'), plan);
   await writeJsonFile(path.join(outputDir, 'custom-events.json'), plan.customEvents);
 
-  await writeJsonFile(path.join(terraformDir, 'generated', runId+'-dashboard.auto.tf.json'), terraformJson);
+  await writeJsonFile(path.join(terraformDir, 'generated', `${runId}-dashboard.auto.tf.json`), terraformJson);
 
   console.log(`Planner finalizado. Eventos: ${rows.length}`);
   console.log(`Output: ${outputDir}`);

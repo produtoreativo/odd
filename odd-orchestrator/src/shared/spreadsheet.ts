@@ -15,7 +15,7 @@ const REQUIRED_COLUMNS = [
   'query_hint'
 ] as const;
 
-const ALLOWED_WIDGETS: SupportedWidget[] = ['event_stream', 'note'];
+const ALLOWED_WIDGETS: SupportedWidget[] = ['event_stream', 'note', 'query_value', 'timeseries'];
 
 type RawRow = Record<string, unknown>;
 

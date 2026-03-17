@@ -18,7 +18,7 @@ const responseFormat = {
           actor: { type: 'string' },
           service: { type: 'string' },
           tags: { type: 'array', items: { type: 'string' } },
-          dashboardWidget: { type: 'string', enum: ['event_stream', 'note'] },
+          dashboardWidget: { type: 'string', enum: ['event_stream', 'note', 'query_value', 'timeseries'] },
           queryHint: { type: 'string' }
         },
         required: ['ordem', 'eventKey', 'eventTitle', 'stage', 'actor', 'service', 'tags', 'dashboardWidget', 'queryHint']
@@ -36,7 +36,7 @@ const responseFormat = {
           actor: { type: 'string' },
           service: { type: 'string' },
           tags: { type: 'array', items: { type: 'string' } },
-          dashboardWidget: { type: 'string', enum: ['event_stream', 'note'] },
+          dashboardWidget: { type: 'string', enum: ['event_stream', 'note', 'query_value', 'timeseries'] },
           queryHint: { type: 'string' }
         },
         required: ['ordem', 'eventKey', 'eventTitle', 'stage', 'actor', 'service', 'tags', 'dashboardWidget', 'queryHint']

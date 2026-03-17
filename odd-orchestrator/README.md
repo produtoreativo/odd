@@ -8,14 +8,22 @@ Projeto mínimo em TypeScript com 2 agentes:
   - `terraform/generated/dashboard.auto.tf.json`
 - `applier`: executa Terraform e ingere os eventos sintéticos no DataDog.
 
-## Escopo intencionalmente simples
+## Escopo visual atual
 
-Esta versão foca somente em:
+Esta versão gera dashboards no padrão visual de funil operacional, com bandas fixas:
 
-- `event_stream`
-- `note`
+- `hero_alert`
+- `failure_kpis`
+- `failure_trends`
+- `success_kpis`
+- `success_trends`
 
-Isso evita erro conceitual de prometer widgets numéricos sem pipeline de métricas customizadas.
+Os widgets de dados produzidos pelo planner são:
+
+- `query_value`
+- `timeseries`
+
+O parser da planilha também aceita `event_stream` e `note` por compatibilidade, mas o plano final é normalizado para cards numéricos e séries temporais.
 
 ## Formato mínimo da planilha
 
@@ -35,8 +43,8 @@ A primeira aba do XLSX ou o CSV devem ter estas colunas:
 
 | ordem | event_key | event_title | stage | actor | service | tags | dashboard_widget | query_hint |
 |---|---|---|---|---|---|---|---|---|
-| 1 | analyst_entry_approved | Analyst Entry Approved | triagem | analyst | risk-analysis | journey:inspection,domain:risk | event_stream | tags:(event_key:analyst_entry_approved service:risk-analysis) |
-| 2 | inspection_requested | Inspection Requested | solicitacao | system | inspection-api | journey:inspection,domain:field | event_stream | tags:(event_key:inspection_requested service:inspection-api) |
+| 1 | analyst_entry_approved | Analyst Entry Approved | triagem | analyst | risk-analysis | journey:inspection,domain:risk | query_value | tags:(event_key:analyst_entry_approved service:risk-analysis) |
+| 2 | inspection_requested | Inspection Requested | solicitacao | system | inspection-api | journey:inspection,domain:field | timeseries | tags:(event_key:inspection_requested service:inspection-api) |
 
 ## Instalação
 
@@ -124,5 +132,6 @@ generated/
 ## Observações de corretude
 
 - O dashboard gerado usa `datadog_dashboard_json` em Terraform.
+- O layout do dashboard é `free` com posições fixas calculadas pelo compilador.
 - Os eventos sintéticos são preparados para `POST /api/v1/events`.
 - O parser aceita tanto CSV quanto XLSX; no caso do XLSX, usa a primeira aba não vazia.

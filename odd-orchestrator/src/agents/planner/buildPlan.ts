@@ -1,132 +1,235 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { DashboardPlan, EventStormingRow, CategorizedEvents } from '../../shared/types.js';
+import { DashboardBandId, DashboardBandPlan, DashboardPlan, DashboardWidgetPlan, EventStormingRow, CategorizedEvents } from '../../shared/types.js';
 import { LlmExecutor } from '../../shared/llm/index.js';
 
-const responseFormat = {
-  type: 'object',
-  properties: {
-    dashboardTitle: { type: 'string' },
-    sections: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          sectionType: { type: 'string', enum: ['problems', 'normal'] },
-          sectionTitle: { type: 'string' },
-          groups: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                stage: { type: 'string' },
-                title: { type: 'string' },
-                widgets: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'string' },
-                      title: { type: 'string' },
-                      widgetType: { type: 'string', enum: ['event_stream', 'note'] },
-                      query: { type: 'string' },
-                      stage: { type: 'string' }
-                    },
-                    required: ['id', 'title', 'widgetType', 'query', 'stage']
-                  }
-                }
-              },
-              required: ['stage', 'title', 'widgets']
-            }
-          }
-        },
-        required: ['sectionType', 'sectionTitle', 'groups']
-      }
+const BAND_ORDER: DashboardBandId[] = [
+  'hero_alert',
+  'failure_kpis',
+  'failure_trends',
+  'success_kpis',
+  'success_trends'
+];
+
+const PROBLEM_HINTS = ['timeout', 'error', 'failed', 'failure', 'reject', 'rejected', 'alert', 'warning', 'falha', 'erro', 'rejeitado', 'alerta'];
+const FINAL_STAGE_HINTS = ['checkout', 'payment', 'approval', 'completed', 'conclusao', 'conclusão', 'adesao', 'adesão', 'grupo', 'order'];
+
+function toStageTitle(stage: string): string {
+  return stage
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function buildEventQuery(event: EventStormingRow): string {
+  if (event.queryHint.trim() !== '') {
+    return event.queryHint.includes('source:odd')
+      ? event.queryHint
+      : `${event.queryHint.replace(/\)\s*$/, '')} source:odd)`;
+  }
+  return `tags:(event_key:${event.eventKey} source:odd)`;
+}
+
+function buildStageQuery(stage: string, events?: EventStormingRow[]): string {
+  if (events && events.length > 0) {
+    const clauses = events
+      .map((event) => `event_key:${event.eventKey}`)
+      .join(' OR ');
+    return `tags:(${clauses} source:odd)`;
+  }
+  return `tags:(stage:${stage} source:odd)`;
+}
+
+function scoreProblem(event: EventStormingRow): number {
+  const haystack = `${event.eventKey} ${event.eventTitle} ${event.stage} ${event.tags.join(' ')}`.toLowerCase();
+  let score = 0;
+
+  for (const hint of PROBLEM_HINTS) {
+    if (haystack.includes(hint)) score += 10;
+  }
+
+  for (const hint of FINAL_STAGE_HINTS) {
+    if (haystack.includes(hint)) score += 4;
+  }
+
+  return score - event.ordem / 1000;
+}
+
+function buildHeroWidget(problems: EventStormingRow[], normal: EventStormingRow[]): DashboardWidgetPlan {
+  if (problems.length > 0) {
+    const topProblem = [...problems].sort((left, right) => scoreProblem(right) - scoreProblem(left))[0];
+    return {
+      id: 'hero_alert_primary',
+      title: `${topProblem.eventTitle} nos últimos 5m`,
+      widgetType: 'query_value',
+      query: buildEventQuery(topProblem),
+      stage: topProblem.stage,
+      sectionType: 'problems',
+      sourceEventKeys: [topProblem.eventKey],
+      visualRole: 'hero_alert',
+      palette: 'alert'
+    };
+  }
+
+  const allNormal = normal.length > 0 ? normal : [];
+  const stage = allNormal[0]?.stage ?? 'overview';
+  return {
+    id: 'hero_alert_clear',
+    title: 'Sem falhas críticas | volume saudável nos últimos 5m',
+    widgetType: 'query_value',
+    query: allNormal.length > 0 ? buildStageQuery(stage, allNormal) : 'tags:(source:odd)',
+    stage,
+    sectionType: 'normal',
+    sourceEventKeys: allNormal.map((event) => event.eventKey),
+    visualRole: 'hero_alert',
+    palette: 'success'
+  };
+}
+
+function buildKpiWidgets(events: EventStormingRow[], sectionType: 'problems' | 'normal'): DashboardWidgetPlan[] {
+  return events
+    .slice()
+    .sort((left, right) => left.ordem - right.ordem)
+    .map((event, index) => ({
+      id: `${sectionType}_kpi_${index + 1}_${event.eventKey}`,
+      title: event.eventTitle,
+      widgetType: 'query_value',
+      query: buildEventQuery(event),
+      stage: event.stage,
+      sectionType,
+      sourceEventKeys: [event.eventKey],
+      visualRole: 'kpi',
+      palette: sectionType === 'problems' ? (index === 0 ? 'alert' : 'warning') : 'success'
+    }));
+}
+
+function buildTrendWidgets(events: EventStormingRow[], sectionType: 'problems' | 'normal'): DashboardWidgetPlan[] {
+  const grouped = new Map<string, EventStormingRow[]>();
+  const firstSeen = new Map<string, number>();
+
+  for (const event of events.slice().sort((left, right) => left.ordem - right.ordem)) {
+    if (!grouped.has(event.stage)) grouped.set(event.stage, []);
+    grouped.get(event.stage)?.push(event);
+    if (!firstSeen.has(event.stage)) firstSeen.set(event.stage, event.ordem);
+  }
+
+  return [...grouped.entries()]
+    .sort((left, right) => {
+      const countDelta = right[1].length - left[1].length;
+      if (countDelta !== 0) return countDelta;
+      return (firstSeen.get(left[0]) ?? 0) - (firstSeen.get(right[0]) ?? 0);
+    })
+    .slice(0, 3)
+    .map(([stage, stageEvents], index) => ({
+      id: `${sectionType}_trend_${index + 1}_${stage}`,
+      title: `${sectionType === 'problems' ? 'Falhas' : 'Sucessos'} em ${toStageTitle(stage)}`,
+      widgetType: 'timeseries',
+      query: buildStageQuery(stage, stageEvents),
+      stage,
+      sectionType,
+      sourceEventKeys: stageEvents.map((event) => event.eventKey),
+      visualRole: 'trend',
+      palette: sectionType === 'problems' ? 'alert' : 'success'
+    }));
+}
+
+function buildBands(categorized: CategorizedEvents): DashboardBandPlan[] {
+  return [
+    {
+      id: 'hero_alert',
+      title: 'Hero Alert',
+      sectionType: categorized.problems.length > 0 ? 'problems' : 'normal',
+      widgets: [buildHeroWidget(categorized.problems, categorized.normal)]
     },
-    customEvents: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          text: { type: 'string' },
-          tags: { type: 'array', items: { type: 'string' } }
-        },
-        required: ['title', 'text', 'tags']
+    {
+      id: 'failure_kpis',
+      title: 'Falhas por evento',
+      sectionType: 'problems',
+      widgets: buildKpiWidgets(categorized.problems, 'problems')
+    },
+    {
+      id: 'failure_trends',
+      title: 'Falhas por etapa',
+      sectionType: 'problems',
+      widgets: buildTrendWidgets(categorized.problems, 'problems')
+    },
+    {
+      id: 'success_kpis',
+      title: 'Sucessos por evento',
+      sectionType: 'normal',
+      widgets: buildKpiWidgets(categorized.normal, 'normal')
+    },
+    {
+      id: 'success_trends',
+      title: 'Sucessos por etapa',
+      sectionType: 'normal',
+      widgets: buildTrendWidgets(categorized.normal, 'normal')
+    }
+  ];
+}
+
+function buildCustomEvents(categorized: CategorizedEvents) {
+  return [...categorized.problems, ...categorized.normal]
+    .slice()
+    .sort((left, right) => left.ordem - right.ordem)
+    .map((event) => ({
+      title: event.eventKey,
+      text: `Business event emitted from Event Storming row ${event.ordem}`,
+      tags: [
+        `event_key:${event.eventKey}`,
+        `stage:${event.stage}`,
+        `actor:${event.actor}`,
+        `service:${event.service}`,
+        ...event.tags,
+        'source:odd'
+      ]
+    }));
+}
+
+function validate(plan: DashboardPlan, inputRows: EventStormingRow[]): void {
+  if (plan.bands.length !== BAND_ORDER.length) {
+    throw new Error(`Invalid number of dashboard bands: expected ${BAND_ORDER.length}, got ${plan.bands.length}`);
+  }
+
+  const inputKeys = new Set(inputRows.map((row) => row.eventKey));
+  const referencedKeys = new Set<string>();
+  const customEventKeys = new Set<string>();
+
+  plan.bands.forEach((band, index) => {
+    if (band.id !== BAND_ORDER[index]) throw new Error(`Unexpected band order at position ${index}: ${band.id}`);
+    for (const widget of band.widgets) {
+      if (widget.widgetType !== 'query_value' && widget.widgetType !== 'timeseries') {
+        throw new Error(`Invalid widgetType: ${widget.widgetType}`);
+      }
+      if (!Array.isArray(widget.sourceEventKeys) || widget.sourceEventKeys.length === 0) {
+        throw new Error(`Widget ${widget.id} must reference at least one source event`);
+      }
+      for (const eventKey of widget.sourceEventKeys) {
+        if (!inputKeys.has(eventKey)) throw new Error(`Unknown source event key: ${eventKey}`);
+        referencedKeys.add(eventKey);
       }
     }
-  },
-  required: ['dashboardTitle', 'sections', 'customEvents']
-};
+  });
 
-const promptTemplatePath = path.join(__dirname, 'buildPlan.prompt.md');
-let promptTemplatePromise: Promise<string> | null = null;
-
-async function loadPromptTemplate(): Promise<string> {
-  if (!promptTemplatePromise) {
-    promptTemplatePromise = readFile(promptTemplatePath, 'utf-8');
-  }
-  return promptTemplatePromise;
-}
-
-async function buildPrompt(categorized: CategorizedEvents, dashboardTitle: string): Promise<string> {
-  const template = await loadPromptTemplate();
-  return template
-    .replaceAll('{{DASHBOARD_TITLE_JSON}}', JSON.stringify(dashboardTitle))
-    .replaceAll('{{PROBLEMS_JSON}}', JSON.stringify(categorized.problems, null, 2))
-    .replaceAll('{{NORMAL_JSON}}', JSON.stringify(categorized.normal, null, 2));
-}
-
-function validate(obj: unknown, inputRows: EventStormingRow[]): asserts obj is DashboardPlan {
-  if (!obj || typeof obj !== 'object') throw new Error('LLM returned non-object');
-  const plan = obj as Record<string, unknown>;
-
-  if (typeof plan.dashboardTitle !== 'string') throw new Error('Missing dashboardTitle');
-  if (!Array.isArray(plan.sections)) throw new Error('Missing sections array');
-  if (!Array.isArray(plan.customEvents)) throw new Error('Missing customEvents array');
-
-  const inputKeys = new Set(inputRows.map(r => r.eventKey));
-  const seenWidgetKeys = new Set<string>();
-  const seenEventKeys = new Set<string>();
-
-  for (const section of plan.sections) {
-    const s = section as Record<string, unknown>;
-    if (s.sectionType !== 'problems' && s.sectionType !== 'normal') throw new Error('Invalid sectionType');
-    if (typeof s.sectionTitle !== 'string') throw new Error('Missing sectionTitle');
-    if (!Array.isArray(s.groups)) throw new Error('Missing groups array in section');
-
-    for (const group of s.groups) {
-      const g = group as Record<string, unknown>;
-      if (typeof g.stage !== 'string' || typeof g.title !== 'string') throw new Error('Invalid group structure');
-      if (!Array.isArray(g.widgets)) throw new Error('Missing widgets array in group');
-      for (const w of g.widgets as Record<string, unknown>[]) {
-        if (typeof w.id !== 'string' || !inputKeys.has(w.id)) throw new Error(`Unknown widget id: ${w.id}`);
-        if (w.widgetType !== 'event_stream' && w.widgetType !== 'note') throw new Error(`Invalid widgetType: ${w.widgetType}`);
-        if (typeof w.title !== 'string' || typeof w.query !== 'string') throw new Error('Invalid widget fields');
-        if (typeof w.stage !== 'string') throw new Error('Missing widget stage');
-        seenWidgetKeys.add(w.id);
-      }
-    }
+  for (const event of plan.customEvents) {
+    customEventKeys.add(event.title);
+    if (!event.tags.includes('source:odd')) throw new Error(`Missing source:odd tag on custom event ${event.title}`);
   }
 
-  for (const evt of plan.customEvents) {
-    const e = evt as Record<string, unknown>;
-    if (typeof e.title !== 'string' || typeof e.text !== 'string') throw new Error('Invalid customEvent fields');
-    if (!Array.isArray(e.tags)) throw new Error('Missing customEvent tags');
-    if (!(e.tags as string[]).includes('source:odd')) throw new Error('Missing source:odd tag');
-    seenEventKeys.add(e.title);
-  }
-
-  for (const key of inputKeys) {
-    if (!seenWidgetKeys.has(key)) throw new Error(`Missing widget for eventKey: ${key}`);
-    if (!seenEventKeys.has(key)) throw new Error(`Missing customEvent for eventKey: ${key}`);
+  for (const eventKey of inputKeys) {
+    if (!referencedKeys.has(eventKey)) throw new Error(`Event not represented in dashboard plan: ${eventKey}`);
+    if (!customEventKeys.has(eventKey)) throw new Error(`Missing custom event payload for ${eventKey}`);
   }
 }
 
-export async function buildDashboardPlan(llm: LlmExecutor, categorized: CategorizedEvents, dashboardTitle: string): Promise<DashboardPlan> {
-  const allRows = [...categorized.problems, ...categorized.normal];
-  const prompt = await buildPrompt(categorized, dashboardTitle);
-  const result = await llm.call(prompt, responseFormat);
-  validate(result, allRows);
-  return result;
+export async function buildDashboardPlan(_llm: LlmExecutor, categorized: CategorizedEvents, dashboardTitle: string): Promise<DashboardPlan> {
+  const plan: DashboardPlan = {
+    dashboardTitle,
+    bands: buildBands(categorized),
+    customEvents: buildCustomEvents(categorized)
+  };
+
+  validate(plan, [...categorized.problems, ...categorized.normal]);
+  return plan;
 }

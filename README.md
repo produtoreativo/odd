@@ -2,6 +2,15 @@
 
 > Transformando intenções de produto em requisitos estruturados e dashboards operacionais através de agentes de IA.
 
+## Status do projeto
+
+O ecossistema **odd** ainda está em construção.
+
+- **odd-orchestrator** — **Release Candidate (RC)**. É o componente mais maduro hoje e já cobre o fluxo de Event Storming para plano de dashboard, geração de Terraform e aplicação no Datadog.
+- **Demais agentes e pipeline multi-agente** — **em construção**. As peças fora do orchestrator ainda estão evoluindo em arquitetura, contratos e integração end-to-end.
+
+Se você quer avaliar o projeto agora, o ponto de entrada recomendado é o diretório `odd-orchestrator/`.
+
 ## O que é o odd?
 
 O **odd** é um sistema de engenharia de requisitos e observabilidade orientado por IA, construído sobre o conceito de **Observability Driven Design (ODD)** — a ideia de que a observabilidade não é algo que se adiciona depois, mas sim parte fundamental do design desde o primeiro momento.
@@ -75,7 +84,7 @@ O odd resolve isso com um pipeline automatizado que conecta essas etapas usando 
 
 ## Componentes
 
-### odd-orchestrator (TypeScript/Node.js)
+### odd-orchestrator (TypeScript/Node.js) — Release Candidate
 
 Responsável por transformar planilhas de Event Storming em dashboards do Datadog via Terraform.
 
@@ -84,7 +93,7 @@ Responsável por transformar planilhas de Event Storming em dashboards do Datado
 
 Cada prompt do Planner pode usar um modelo de LLM diferente (Ollama local, OpenAI ou Anthropic Claude).
 
-### tools (Python/Docker)
+### tools (Python/Docker) — Em construção
 
 Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augmented Generation).
 
@@ -116,6 +125,17 @@ Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augment
 | Infraestrutura | Docker Compose, PostgreSQL, Redis |
 
 ## Estado atual e roadmap
+
+### Maturidade atual
+
+- **Release Candidate**
+  - `odd-orchestrator`
+- **Em construção**
+  - `tools/`
+  - Gertrudes como produto operacional dentro do pipeline maior
+  - Corrinha
+  - Creuza
+  - Integração completa entre todos os agentes
 
 ### Pronto
 
@@ -183,7 +203,7 @@ O Planner espera planilhas XLSX ou CSV com as seguintes colunas:
 | `actor` | Quem dispara ou trata o evento |
 | `service` | Serviço responsável |
 | `tags` | Metadados separados por vírgula (ex: `journey:inspection,domain:risk`) |
-| `dashboard_widget` | Tipo de widget: `event_stream` ou `note` |
+| `dashboard_widget` | Tipo de widget de origem: `event_stream`, `note`, `query_value` ou `timeseries` |
 | `query_hint` | Template de query para o Datadog |
 
 Veja exemplos em `odd-orchestrator/samples/`.
@@ -191,7 +211,7 @@ Veja exemplos em `odd-orchestrator/samples/`.
 ## Artefatos gerados
 
 ### Pelo Planner
-- `generated/plan.json` — Estrutura do dashboard (seções, grupos, widgets)
+- `generated/plan.json` — Estrutura do dashboard em bandas visuais fixas (hero, KPIs e tendências)
 - `generated/custom-events.json` — Eventos sintéticos para o Datadog
 - `terraform/generated/{runId}-dashboard.auto.tf.json` — Código Terraform
 
