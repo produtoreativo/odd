@@ -1,23 +1,23 @@
 import { spawn } from 'node:child_process';
+import { ObservabilityProvider } from '../../shared/provider.js';
 
-export async function runTerraform(dir: string, dryRun: boolean): Promise<string[]> {
-
-  const apiKey = process.env.DD_API_KEY;
-  const appKey = process.env.DD_APP_KEY;
-
-  const commands = [
-    ['terraform', 
-      ['apply', 
-        '-auto-approve', 
-        '-var',
-        `datadog_api_key=${apiKey}`,
-        '-var',
-        `datadog_app_key=${appKey}`
-      ]
-    ]
-  ] as const;
-
-// terraform apply -auto-approve -var datadog_api_key=$DD_API_KEY -var datadog_app_key=$DD_APP_KEY
+export async function runTerraform(dir: string, dryRun: boolean, provider: ObservabilityProvider): Promise<string[]> {
+  const commands = provider === 'datadog'
+    ? [
+        ['terraform',
+          [
+            'apply',
+            '-auto-approve',
+            '-var',
+            `datadog_api_key=${process.env.DD_API_KEY ?? ''}`,
+            '-var',
+            `datadog_app_key=${process.env.DD_APP_KEY ?? ''}`
+          ]
+        ]
+      ] as const
+    : [
+        ['terraform', ['apply', '-auto-approve']]
+      ] as const;
 
   const executed: string[] = [];
   for (const [cmd, args] of commands) {
@@ -25,14 +25,45 @@ export async function runTerraform(dir: string, dryRun: boolean): Promise<string
     if (dryRun) {
       continue;
     }
-    await exec(cmd, args, dir);
+    await exec(cmd, args, dir, terraformEnv(provider));
   }
   return executed;
 }
 
-function exec(command: string, args: readonly string[], cwd: string): Promise<void> {
+function terraformEnv(provider: ObservabilityProvider): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  if (provider === 'dynatrace') {
+    const envUrl = env.DYNATRACE_ENV_URL ?? env.DYNATRACE_ENVIRONMENT_URL ?? env.DT_ENV_URL ?? env.DT_ENVIRONMENT_URL;
+    const apiToken = env.DYNATRACE_API_TOKEN ?? env.DT_API_TOKEN;
+    const platformToken = env.DYNATRACE_PLATFORM_TOKEN ?? env.DT_PLATFORM_TOKEN ?? apiToken;
+
+    if (envUrl) {
+      env.DYNATRACE_ENV_URL = envUrl;
+      env.DYNATRACE_ENVIRONMENT_URL = envUrl;
+      env.DT_ENV_URL = envUrl;
+      env.DT_ENVIRONMENT_URL = envUrl;
+      env.DYNATRACE_ENDPOINT_URL = envUrl;
+      env.DT_ENDPOINT_URL = envUrl;
+    }
+
+    if (apiToken) {
+      env.DYNATRACE_API_TOKEN = apiToken;
+      env.DT_API_TOKEN = apiToken;
+    }
+
+    if (platformToken) {
+      env.DYNATRACE_PLATFORM_TOKEN = platformToken;
+      env.DT_PLATFORM_TOKEN = platformToken;
+    }
+  }
+
+  return env;
+}
+
+function exec(command: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, [...args], { cwd, stdio: 'inherit' });
+    const child = spawn(command, [...args], { cwd, stdio: 'inherit', env });
     child.on('exit', (code) => {
       if (code === 0) {
         resolve();

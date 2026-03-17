@@ -1,31 +1,40 @@
 import path from 'node:path';
 import { parseArgs, requireStringArg } from '../../shared/cli.js';
+import { loadDotEnv } from '../../shared/env.js';
 import { writeJsonFile } from '../../shared/fs.js';
-import { ingestEvents } from './datadog.js';
+import { parseProvider } from '../../shared/provider.js';
+import { ingestEvents as ingestDatadogEvents } from './datadog.js';
+import { ingestEvents as ingestDynatraceEvents } from './dynatrace.js';
 import { runTerraform } from './terraform.js';
 
 async function main(): Promise<void> {
+  loadDotEnv();
+
   const args = parseArgs(process.argv.slice(2));
+  const provider = parseProvider(args.provider);
   const terraformDir = requireStringArg(args, 'terraform-dir');
-  const eventsFile = requireStringArg(args, 'events-file');
+  const eventsFile = typeof args['events-file'] === 'string' ? args['events-file'] : '';
   const dryRun = args['dry-run'] === true;
   const outputDir = typeof args.output === 'string' ? args.output : './generated';
 
   let terraformCommands: string[] = [];
   let terraformError: string | undefined;
   try {
-    terraformCommands = await runTerraform(terraformDir, dryRun);
+    terraformCommands = await runTerraform(terraformDir, dryRun, provider);
   } catch (error) {
     terraformError = error instanceof Error ? error.message : String(error);
   }
 
-  const ingestedEvents = await ingestEvents(eventsFile, dryRun);
+  const ingestedEvents = provider === 'datadog'
+    ? await ingestDatadogEvents(requireStringArg(args, 'events-file'), dryRun)
+    : await ingestDynatraceEvents(requireStringArg(args, 'events-file'), dryRun);
   const failedEventsCount = ingestedEvents.filter((event) => event.status === 'failed').length;
 
   const report = {
+    provider,
     dryRun,
     terraformDir,
-    eventsFile,
+    eventsFile: eventsFile || undefined,
     terraformCommands,
     terraformError,
     failedEventsCount,
@@ -34,7 +43,7 @@ async function main(): Promise<void> {
 
   await writeJsonFile(path.join(outputDir, 'apply-report.json'), report);
 
-  console.log(`Applier finalizado. Dry run: ${dryRun}`);
+  console.log(`Applier finalizado. Provider: ${provider}. Dry run: ${dryRun}`);
   if (terraformError) {
     console.error(`Terraform com falha: ${terraformError}`);
   }

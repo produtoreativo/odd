@@ -59,7 +59,8 @@ CSV:
 ```bash
 npm run planner -- \
   --input ./samples/event-storming.csv \
-  --dashboard-title "ODD - Inspection Journey"
+  --dashboard-title "ODD - Inspection Journey" \
+  --provider datadog
 ```
 
 XLSX:
@@ -67,8 +68,23 @@ XLSX:
 ```bash
 npm run planner -- \
   --input ./samples/event-storming.xlsx \
-  --dashboard-title "ODD - Inspection Journey"
+  --dashboard-title "ODD - Inspection Journey" \
+  --provider datadog
 ```
+
+Dynatrace:
+
+```bash
+npm run planner -- \
+  --input ./samples/event-storming.xlsx \
+  --dashboard-title "ODD - Inspection Journey" \
+  --provider dynatrace
+```
+
+Observação:
+
+- O compilador Dynatrace gera uma dashboard no formato novo via `dynatrace_document`, mantendo a distribuição proporcional do `DashboardPlan` com tiles `MARKDOWN`.
+- O fluxo Datadog continua sendo o caminho mais completo para widgets analíticos (`query_value` e `timeseries`) porque o input atual ainda não carrega um modelo de métrica/query nativo do Dynatrace.
 
 Com Ollama opcional:
 
@@ -86,6 +102,7 @@ Dry run:
 npm run applier -- \
   --terraform-dir ./terraform \
   --events-file ./generated/custom-events.json \
+  --provider datadog \
   --dry-run
 ```
 
@@ -97,7 +114,18 @@ DD_APP_KEY=yyy \
 DD_SITE=datadoghq.com \
 npm run applier -- \
   --terraform-dir ./terraform \
-  --events-file ./generated/custom-events.json
+  --events-file ./generated/custom-events.json \
+  --provider datadog
+```
+
+Dynatrace:
+
+```bash
+npm run applier -- \
+  --terraform-dir ./terraform-dynatrace \
+  --events-file ./generated/custom-events.json \
+  --provider dynatrace \
+  --dry-run
 ```
 
 ## Variáveis de ambiente
@@ -115,6 +143,17 @@ npm run applier -- \
 - `DD_SITE=datadoghq.com`
 - `DD_API_BASE_URL=https://api.datadoghq.com`
 - `DD_EVENT_BATCH_SIZE=10`
+- `DYNATRACE_ENV_URL`
+- `DYNATRACE_API_TOKEN`
+- `DYNATRACE_ENTITY_SELECTOR`
+- `DYNATRACE_MANAGEMENT_ZONE`
+- `DYNATRACE_EVENT_TIMEOUT_MINUTES`
+
+Convenções opcionais de tags para Dynatrace:
+
+- `dynatrace.entity_selector:<selector>` — sobrescreve o `entitySelector` do evento
+- `dynatrace.management_zone:<mz>` — adiciona contexto de management zone e, se houver `entitySelector`, injeta `mzName("<mz>")`
+- `dt.entity.<type>:<id>` — copia propriedades `dt.entity.*` para o payload do evento
 
 ## Estrutura
 
@@ -126,6 +165,7 @@ src/
   shared/
 samples/
 terraform/generated/
+terraform-dynatrace/generated/
 generated/
 ```
 

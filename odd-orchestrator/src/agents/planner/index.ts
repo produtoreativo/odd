@@ -1,11 +1,14 @@
 import path from 'node:path';
 import { parseArgs, requireStringArg } from '../../shared/cli.js';
+import { loadDotEnv } from '../../shared/env.js';
 import { writeJsonFile } from '../../shared/fs.js';
+import { parseProvider } from '../../shared/provider.js';
 import { readEventStormingFile } from '../../shared/spreadsheet.js';
 import { Ollama, Model } from '../../shared/llm/index.js';
 import { categorizeEvents } from './categorizeEvents.js';
 import { buildDashboardPlan } from './buildPlan.js';
 import { buildDatadogDashboardTerraform } from './datadogTf.js';
+import { buildDynatraceDashboardTerraform } from './dynatraceTf.js';
 
 function buildRunId(): string {
   const now = new Date();
@@ -14,12 +17,15 @@ function buildRunId(): string {
 }
 
 async function main(): Promise<void> {
+  loadDotEnv();
+
   const args = parseArgs(process.argv.slice(2));
   const input = requireStringArg(args, 'input');
   const dashboardTitle = requireStringArg(args, 'dashboard-title');
   const baseOutput = typeof args.output === 'string' ? args.output : './generated';
+  const provider = parseProvider(args.provider);
 
-  const terraformDir = path.join('./terraform');
+  const terraformDir = path.join(provider === 'datadog' ? './terraform' : './terraform-dynatrace');
 
   const inputName = path.basename(input, path.extname(input));
   const runId = buildRunId();
@@ -30,14 +36,16 @@ async function main(): Promise<void> {
   const rows = await readEventStormingFile(input);
   const categorized = await categorizeEvents(plannerLlm, rows);
   const plan = await buildDashboardPlan(plannerLlm, categorized, dashboardTitle);
-  const terraformJson = await buildDatadogDashboardTerraform(plan);
+  const terraformJson = provider === 'datadog'
+    ? await buildDatadogDashboardTerraform(plan)
+    : await buildDynatraceDashboardTerraform(plan);
 
   await writeJsonFile(path.join(outputDir, 'plan.json'), plan);
   await writeJsonFile(path.join(outputDir, 'custom-events.json'), plan.customEvents);
 
-  await writeJsonFile(path.join(terraformDir, 'generated', `${runId}-dashboard.auto.tf.json`), terraformJson);
+  await writeJsonFile(path.join(terraformDir, 'generated', `${inputName}-dashboard.auto.tf.json`), terraformJson);
 
-  console.log(`Planner finalizado. Eventos: ${rows.length}`);
+  console.log(`Planner finalizado. Provider: ${provider}. Eventos: ${rows.length}`);
   console.log(`Output: ${outputDir}`);
 }
 
