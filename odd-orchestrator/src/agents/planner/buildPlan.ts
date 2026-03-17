@@ -169,22 +169,43 @@ function buildBands(categorized: CategorizedEvents): DashboardBandPlan[] {
   ];
 }
 
+function buildTaggedEvent(event: EventStormingRow, outcome: 'problem' | 'normal') {
+  const isProblem = outcome === 'problem';
+
+  return {
+    title: event.eventKey,
+    text: isProblem
+      ? `Exception event emitted from Event Storming row ${event.ordem}`
+      : `Business event emitted from Event Storming row ${event.ordem}`,
+    alert_type: isProblem ? 'error' as const : 'success' as const,
+    priority: 'normal' as const,
+    source_type_name: isProblem ? 'odd-exception' : 'odd-business-event',
+    aggregation_key: `${outcome}:${event.stage}`,
+    tags: [
+      `event_key:${event.eventKey}`,
+      `stage:${event.stage}`,
+      `actor:${event.actor}`,
+      `service:${event.service}`,
+      `outcome:${outcome}`,
+      isProblem ? 'exception:true' : 'success:true',
+      isProblem ? 'event_type:exception' : 'event_type:business',
+      ...event.tags,
+      'source:odd'
+    ]
+  };
+}
+
 function buildCustomEvents(categorized: CategorizedEvents) {
-  return [...categorized.problems, ...categorized.normal]
+  return [
+    ...categorized.problems.map((event) => buildTaggedEvent(event, 'problem')),
+    ...categorized.normal.map((event) => buildTaggedEvent(event, 'normal'))
+  ]
     .slice()
-    .sort((left, right) => left.ordem - right.ordem)
-    .map((event) => ({
-      title: event.eventKey,
-      text: `Business event emitted from Event Storming row ${event.ordem}`,
-      tags: [
-        `event_key:${event.eventKey}`,
-        `stage:${event.stage}`,
-        `actor:${event.actor}`,
-        `service:${event.service}`,
-        ...event.tags,
-        'source:odd'
-      ]
-    }));
+    .sort((left, right) => {
+      const leftOrder = Number.parseInt(left.text.match(/row (\d+)/)?.[1] ?? '0', 10);
+      const rightOrder = Number.parseInt(right.text.match(/row (\d+)/)?.[1] ?? '0', 10);
+      return leftOrder - rightOrder;
+    });
 }
 
 function validate(plan: DashboardPlan, inputRows: EventStormingRow[]): void {

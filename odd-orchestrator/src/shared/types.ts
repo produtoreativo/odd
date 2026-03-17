@@ -44,6 +44,10 @@ export type CustomEventPayload = {
   title: string;
   text: string;
   tags: string[];
+  alert_type?: 'error' | 'warning' | 'info' | 'success';
+  priority?: 'normal' | 'low';
+  source_type_name?: string;
+  aggregation_key?: string;
 };
 
 export type DashboardPlan = {
