@@ -1,4 +1,4 @@
-import { DashboardBandPlan, DashboardPlan, DashboardWidgetPlan } from '../../shared/types.js';
+import { DashboardBandPlan, DashboardPalette, DashboardPlan, DashboardWidgetPlan } from '../../shared/types.js';
 
 type DynatraceMarkdownTile = {
   type: 'markdown';
@@ -12,8 +12,22 @@ type DynatraceDataTile = {
   visualization: 'singleValue' | 'lineChart';
   visualizationSettings: {
     autoSelectVisualization: false;
+    thresholds?: Array<{
+      id: number;
+      field: 'count';
+      title: '';
+      isEnabled: true;
+      rules: Array<{
+        id: number;
+        color: string;
+        comparator: '≥';
+        label: '';
+        value: number;
+      }>;
+    }>;
     singleValue?: {
       labelMode: 'none';
+      colorThresholdTarget?: 'background';
     };
     chartSettings?: {
       gapPolicy: 'gap';
@@ -21,6 +35,15 @@ type DynatraceDataTile = {
       pointsDisplay: 'auto';
       xAxisScaling: 'analyzedTimeframe';
       hiddenLegendFields: ['interval'];
+      colorPalette?: 'log-level' | 'categorical';
+      seriesOverrides?: Array<{
+        seriesId: ['count'];
+        override: {
+          color: {
+            Default: string;
+          };
+        };
+      }>;
     };
   };
   querySettings: {
@@ -101,7 +124,14 @@ function markdownTile(content: string): DynatraceMarkdownTile {
   };
 }
 
-function singleValueTile(title: string, query: string): DynatraceDataTile {
+function thresholdColor(palette: DashboardPalette): string | undefined {
+  if (palette === 'alert') return '#dc172a';
+  if (palette === 'success') return '#2f8f46';
+  return undefined;
+}
+
+function singleValueTile(title: string, query: string, palette: DashboardPalette): DynatraceDataTile {
+  const color = thresholdColor(palette);
   return {
     title,
     type: 'data',
@@ -109,8 +139,24 @@ function singleValueTile(title: string, query: string): DynatraceDataTile {
     visualization: 'singleValue',
     visualizationSettings: {
       autoSelectVisualization: false,
+      ...(color ? {
+        thresholds: [{
+          id: 1,
+          field: 'count',
+          title: '',
+          isEnabled: true,
+          rules: [{
+            id: 0,
+            color,
+            comparator: '≥',
+            label: '',
+            value: 0
+          }]
+        }]
+      } : {}),
       singleValue: {
-        labelMode: 'none'
+        labelMode: 'none',
+        ...(color ? { colorThresholdTarget: 'background' } : {})
       }
     },
     querySettings: {
@@ -129,7 +175,8 @@ function singleValueTile(title: string, query: string): DynatraceDataTile {
   };
 }
 
-function lineChartTile(title: string, query: string): DynatraceDataTile {
+function lineChartTile(title: string, query: string, palette: DashboardPalette): DynatraceDataTile {
+  const color = thresholdColor(palette);
   return {
     title,
     type: 'data',
@@ -142,7 +189,18 @@ function lineChartTile(title: string, query: string): DynatraceDataTile {
         curve: 'linear',
         pointsDisplay: 'auto',
         xAxisScaling: 'analyzedTimeframe',
-        hiddenLegendFields: ['interval']
+        hiddenLegendFields: ['interval'],
+        ...(palette === 'alert' ? { colorPalette: 'log-level' as const } : {}),
+        ...(color ? {
+          seriesOverrides: [{
+            seriesId: ['count'],
+            override: {
+              color: {
+                Default: color
+              }
+            }
+          }]
+        } : {})
       }
     },
     querySettings: {
@@ -173,7 +231,7 @@ function dqlForSingleValue(widget: DashboardWidgetPlan): string {
   return [
     'fetch events',
     `| filter ${filters}`,
-    '| summarize count()'
+    '| summarize count = count()'
   ].join('\n');
 }
 
@@ -218,7 +276,7 @@ function buildHeroTile(
     return GRID.heroHeight + GRID.sectionGap;
   }
 
-  addTile(document, id, singleValueTile(widget.title, dqlForSingleValue(widget)), {
+  addTile(document, id, singleValueTile(widget.title, dqlForSingleValue(widget), widget.palette), {
     x: 0,
     y: 0,
     w: GRID.totalColumns,
@@ -267,8 +325,8 @@ function buildBandTiles(
     }
 
     const tile = widget.widgetType === 'timeseries'
-      ? lineChartTile(widget.title, dqlForTimeseries(widget))
-      : singleValueTile(widget.title, dqlForSingleValue(widget));
+      ? lineChartTile(widget.title, dqlForTimeseries(widget), widget.palette)
+      : singleValueTile(widget.title, dqlForSingleValue(widget), widget.palette);
 
     addTile(document, id, tile, {
       x: left,
