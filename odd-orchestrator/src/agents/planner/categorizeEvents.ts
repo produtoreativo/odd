@@ -88,6 +88,52 @@ async function buildPrompt(rows: EventStormingRow[]): Promise<string> {
   return template.replaceAll('{{EVENT_STORMING_ROWS_JSON}}', JSON.stringify(rows, null, 2));
 }
 
+function normalizeKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function coerceCategorizedRows(candidateRows: unknown[], inputRows: EventStormingRow[]): EventStormingRow[] {
+  const byEventKey = new Map(inputRows.map((row) => [normalizeKey(row.eventKey), row] as const));
+  const byOrder = new Map(inputRows.map((row) => [row.ordem, row] as const));
+  const byTitleStage = new Map(
+    inputRows.map((row) => [`${normalizeKey(row.eventTitle)}|${normalizeKey(row.stage)}`, row] as const)
+  );
+
+  return candidateRows.map((event) => {
+    const e = event as Record<string, unknown>;
+    const eventKey = typeof e.eventKey === 'string' ? normalizeKey(e.eventKey) : '';
+    const order = typeof e.ordem === 'number' ? e.ordem : Number.NaN;
+    const title = typeof e.eventTitle === 'string' ? normalizeKey(e.eventTitle) : '';
+    const stage = typeof e.stage === 'string' ? normalizeKey(e.stage) : '';
+
+    const direct = byEventKey.get(eventKey);
+    if (direct) return direct;
+
+    if (Number.isFinite(order)) {
+      const byOrderMatch = byOrder.get(order);
+      if (byOrderMatch) return byOrderMatch;
+    }
+
+    const byTitleStageMatch = byTitleStage.get(`${title}|${stage}`);
+    if (byTitleStageMatch) return byTitleStageMatch;
+
+    throw new Error(`Unknown eventKey in result: ${String(e.eventKey ?? '')}`);
+  });
+}
+
+function coerceCategorizationResult(obj: unknown, inputRows: EventStormingRow[]): CategorizedEvents {
+  if (!obj || typeof obj !== 'object') throw new Error('LLM returned non-object');
+  const result = obj as Record<string, unknown>;
+
+  if (!Array.isArray(result.problems)) throw new Error('Missing problems array');
+  if (!Array.isArray(result.normal)) throw new Error('Missing normal array');
+
+  return {
+    problems: coerceCategorizedRows(result.problems, inputRows),
+    normal: coerceCategorizedRows(result.normal, inputRows)
+  };
+}
+
 function validate(obj: unknown, inputRows: EventStormingRow[]): asserts obj is CategorizedEvents {
   if (!obj || typeof obj !== 'object') throw new Error('LLM returned non-object');
   const result = obj as Record<string, unknown>;
@@ -164,9 +210,10 @@ function normalizeCategorization(result: CategorizedEvents, inputRows: EventStor
 
 export async function categorizeEvents(llm: LlmExecutor, rows: EventStormingRow[]): Promise<CategorizedEvents> {
   const prompt = await buildPrompt(rows);
-  const result = await llm.call(prompt, responseFormat);
+  const rawResult = await llm.call(prompt, responseFormat);
+  const result = coerceCategorizationResult(rawResult, rows);
   validate(result, rows);
-  const normalized = normalizeCategorization(result as CategorizedEvents, rows);
+  const normalized = normalizeCategorization(result, rows);
   validate(normalized, rows);
   return normalized;
 }
