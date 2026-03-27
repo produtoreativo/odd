@@ -33,22 +33,24 @@ cleanup_tmp() {
 
 trap cleanup_tmp EXIT
 
-if [ "$PROVIDER" != "datadog" ] && [ "$PROVIDER" != "dynatrace" ]; then
+if [ "$PROVIDER" != "datadog" ] && [ "$PROVIDER" != "dynatrace" ] && [ "$PROVIDER" != "grafana" ]; then
   echo "❌ Provider inválido: $PROVIDER"
-  echo "Uso: ./pipeline.sh [datadog|dynatrace] [planilha.xlsx|planilha.csv] [dashboard-title]"
+  echo "Uso: ./pipeline.sh [datadog|dynatrace|grafana] [planilha.xlsx|planilha.csv] [dashboard-title]"
   exit 1
 fi
 
 if [ ! -f "$INPUT_FILE" ]; then
   echo "❌ Planilha não encontrada: $INPUT_FILE"
-  echo "Uso: ./pipeline.sh [datadog|dynatrace] [planilha.xlsx|planilha.csv] [dashboard-title]"
+  echo "Uso: ./pipeline.sh [datadog|dynatrace|grafana] [planilha.xlsx|planilha.csv] [dashboard-title]"
   exit 1
 fi
 
 if [ "$PROVIDER" = "datadog" ]; then
   TERRAFORM_DIR="./terraform"
-else
+elif [ "$PROVIDER" = "dynatrace" ]; then
   TERRAFORM_DIR="./terraform-dynatrace"
+else
+  TERRAFORM_DIR="./terraform-grafana"
 fi
 
 PIPELINE_STEP="env"

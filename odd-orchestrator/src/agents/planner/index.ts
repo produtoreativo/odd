@@ -9,6 +9,7 @@ import { categorizeEvents } from './categorizeEvents.js';
 import { buildDashboardPlan } from './buildPlan.js';
 import { buildDatadogDashboardTerraform } from './datadogTf.js';
 import { buildDynatraceDashboardTerraform } from './dynatraceTf.js';
+import { buildGrafanaDashboardTerraform } from './grafanaTf.js';
 
 function buildRunId(): string {
   const now = new Date();
@@ -33,7 +34,12 @@ async function main(): Promise<void> {
   const baseOutput = typeof args.output === 'string' ? args.output : './generated';
   const provider = parseProvider(args.provider);
 
-  const terraformDir = path.join(provider === 'datadog' ? './terraform' : './terraform-dynatrace');
+  const terraformDirMap: Record<string, string> = {
+    datadog: './terraform',
+    dynatrace: './terraform-dynatrace',
+    grafana: './terraform-grafana'
+  };
+  const terraformDir = path.join(terraformDirMap[provider]);
 
   const inputName = path.basename(input, path.extname(input));
   const runId = buildRunId();
@@ -59,7 +65,9 @@ async function main(): Promise<void> {
   logStep('build-terraform', `provider=${provider}`);
   const terraformJson = provider === 'datadog'
     ? await buildDatadogDashboardTerraform(plan)
-    : await buildDynatraceDashboardTerraform(plan);
+    : provider === 'dynatrace'
+    ? await buildDynatraceDashboardTerraform(plan)
+    : await buildGrafanaDashboardTerraform(plan);
   logStep('build-terraform:done');
 
   logStep('write-artifacts');

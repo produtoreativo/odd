@@ -5,6 +5,7 @@ import { writeJsonFile } from '../../shared/fs.js';
 import { parseProvider } from '../../shared/provider.js';
 import { ingestEvents as ingestDatadogEvents } from './datadog.js';
 import { ingestEvents as ingestDynatraceEvents } from './dynatrace.js';
+import { ingestEvents as ingestGrafanaEvents } from './grafana.js';
 import { runTerraform } from './terraform.js';
 
 async function main(): Promise<void> {
@@ -27,7 +28,9 @@ async function main(): Promise<void> {
 
   const ingestedEvents = provider === 'datadog'
     ? await ingestDatadogEvents(requireStringArg(args, 'events-file'), dryRun)
-    : await ingestDynatraceEvents(requireStringArg(args, 'events-file'), dryRun);
+    : provider === 'dynatrace'
+    ? await ingestDynatraceEvents(requireStringArg(args, 'events-file'), dryRun)
+    : await ingestGrafanaEvents(requireStringArg(args, 'events-file'), dryRun);
   const failedEventsCount = ingestedEvents.filter((event) => event.status === 'failed').length;
 
   const report = {

@@ -2,22 +2,9 @@ import { spawn } from 'node:child_process';
 import { ObservabilityProvider } from '../../shared/provider.js';
 
 export async function runTerraform(dir: string, dryRun: boolean, provider: ObservabilityProvider): Promise<string[]> {
-  const commands = provider === 'datadog'
-    ? [
-        ['terraform',
-          [
-            'apply',
-            '-auto-approve',
-            '-var',
-            `datadog_api_key=${process.env.DD_API_KEY ?? ''}`,
-            '-var',
-            `datadog_app_key=${process.env.DD_APP_KEY ?? ''}`
-          ]
-        ]
-      ] as const
-    : [
-        ['terraform', ['apply', '-auto-approve']]
-      ] as const;
+  const commands = [
+    ['terraform', ['apply', '-auto-approve']]
+  ] as const;
 
   const executed: string[] = [];
   for (const [cmd, args] of commands) {
@@ -32,6 +19,20 @@ export async function runTerraform(dir: string, dryRun: boolean, provider: Obser
 
 function terraformEnv(provider: ObservabilityProvider): NodeJS.ProcessEnv {
   const env = { ...process.env };
+
+  if (provider === 'datadog') {
+    const apiKey = env.DD_API_KEY;
+    const appKey = env.DD_APP_KEY;
+    if (apiKey) env.TF_VAR_datadog_api_key = apiKey;
+    if (appKey) env.TF_VAR_datadog_app_key = appKey;
+  }
+
+  if (provider === 'grafana') {
+    const grafanaUrl = env.GRAFANA_URL;
+    const grafanaAuth = env.GRAFANA_AUTH;
+    if (grafanaUrl) env.TF_VAR_grafana_url = grafanaUrl;
+    if (grafanaAuth) env.TF_VAR_grafana_auth = grafanaAuth;
+  }
 
   if (provider === 'dynatrace') {
     const envUrl = env.DYNATRACE_ENV_URL ?? env.DYNATRACE_ENVIRONMENT_URL ?? env.DT_ENV_URL ?? env.DT_ENVIRONMENT_URL;
