@@ -1,28 +1,36 @@
 import { readFile } from 'node:fs/promises';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { CustomEventPayload } from '../../shared/types.js';
 
-const RATE_LIMIT_DELAY_MS = 500;
-
-export type GrafanaAnnotationResult = {
+export type GrafanaEventIngestionResult = {
   title: string;
   status: 'sent' | 'dry-run' | 'failed';
-  response?: unknown;
+  response?: string;
   error?: string;
 };
 
-type GrafanaAnnotation = {
-  time: number;
-  tags: string[];
-  text: string;
-};
+function tagValue(tags: string[], prefix: string): string | undefined {
+  return tags.find((tag) => tag.startsWith(prefix))?.slice(prefix.length);
+}
 
-function toAnnotation(event: CustomEventPayload): GrafanaAnnotation {
-  return {
-    time: Date.now(),
-    tags: [...event.tags, 'source:odd'],
-    text: `${event.title}: ${event.text}`
+function escapeInfluxValue(value: string): string {
+  return value.replace(/[ ,=\\]/g, (ch) => `\\${ch}`);
+}
+
+function toInfluxLine(event: CustomEventPayload): string {
+  const labels: Record<string, string> = {
+    event_key: tagValue(event.tags, 'event_key:') ?? event.title,
+    stage: tagValue(event.tags, 'stage:') ?? 'unknown',
+    outcome: tagValue(event.tags, 'outcome:') ?? 'unknown',
+    service: tagValue(event.tags, 'service:') ?? 'unknown',
+    source: 'odd'
   };
+
+  const tagString = Object.entries(labels)
+    .map(([k, v]) => `${k}=${escapeInfluxValue(v)}`)
+    .join(',');
+
+  const timestampNs = Date.now() * 1_000_000;
+  return `odd_event_total,${tagString} value=1 ${timestampNs}`;
 }
 
 export async function readEvents(filePath: string): Promise<CustomEventPayload[]> {
@@ -30,53 +38,46 @@ export async function readEvents(filePath: string): Promise<CustomEventPayload[]
   return JSON.parse(content) as CustomEventPayload[];
 }
 
-export async function ingestEvents(filePath: string, dryRun: boolean): Promise<GrafanaAnnotationResult[]> {
+export async function ingestEvents(filePath: string, dryRun: boolean): Promise<GrafanaEventIngestionResult[]> {
   const events = await readEvents(filePath);
 
   if (dryRun) {
     return events.map((event) => ({ title: event.title, status: 'dry-run' }));
   }
 
-  const results: GrafanaAnnotationResult[] = [];
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    if (i > 0) await sleep(RATE_LIMIT_DELAY_MS);
-    try {
-      const response = await sendAnnotation(event);
-      results.push({ title: event.title, status: 'sent', response });
-    } catch (error) {
-      results.push({
-        title: event.title,
-        status: 'failed',
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
+  const metricsUrl = process.env.GRAFANA_METRICS_URL;
+  const metricsUser = process.env.GRAFANA_METRICS_USER;
+  const metricsToken = process.env.GRAFANA_METRICS_TOKEN ?? process.env.GRAFANA_AUTH;
+
+  if (!metricsUrl || !metricsUser || !metricsToken) {
+    throw new Error('GRAFANA_METRICS_URL, GRAFANA_METRICS_USER e GRAFANA_METRICS_TOKEN são obrigatórios para ingestão de métricas no Grafana Cloud.');
   }
 
-  return results;
-}
+  const lines = events.map(toInfluxLine);
+  const body = lines.join('\n');
 
-async function sendAnnotation(event: CustomEventPayload): Promise<unknown> {
-  const url = process.env.GRAFANA_URL;
-  const auth = process.env.GRAFANA_AUTH;
-
-  if (!url || !auth) {
-    throw new Error('GRAFANA_URL e GRAFANA_AUTH são obrigatórios para ingestão real no Grafana.');
-  }
-
-  const annotation = toAnnotation(event);
-  const response = await fetch(`${url.replace(/\/+$/, '')}/api/annotations`, {
+  const endpoint = `${metricsUrl.replace(/\/+$/, '')}/api/v1/push/influx/write`;
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${auth}`
+      'Content-Type': 'text/plain',
+      Authorization: `Basic ${Buffer.from(`${metricsUser}:${metricsToken}`).toString('base64')}`
     },
-    body: JSON.stringify(annotation)
+    body
   });
 
   if (!response.ok) {
-    throw new Error(`Erro ao enviar anotação ${event.title} para Grafana: ${response.status} ${await response.text()}`);
+    const errorText = await response.text();
+    return events.map((event) => ({
+      title: event.title,
+      status: 'failed',
+      error: `Erro ao enviar métricas para Grafana: ${response.status} ${errorText}`
+    }));
   }
 
-  return response.json();
+  return events.map((event) => ({
+    title: event.title,
+    status: 'sent',
+    response: 'metrics pushed via influx line protocol'
+  }));
 }

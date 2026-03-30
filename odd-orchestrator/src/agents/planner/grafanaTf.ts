@@ -8,9 +8,8 @@ type GrafanaPanel = {
   datasource?: { type: string; uid: string };
   targets?: Array<{
     datasource: { type: string; uid: string };
-    matchAny: boolean;
-    tags: string[];
-    type: 'tags';
+    expr: string;
+    legendFormat: string;
     refId: string;
   }>;
   options?: Record<string, unknown>;
@@ -26,7 +25,7 @@ const GRID = {
   headerHeight: 2
 };
 
-const ANNOTATION_DS = { type: 'datasource', uid: '-- Grafana --' };
+const PROMETHEUS_DS = { type: 'prometheus', uid: '${DS_PROMETHEUS}' };
 
 function resourceName(title: string): string {
   return title
@@ -49,8 +48,18 @@ function thresholdColor(palette: DashboardPalette): string {
   return '#8e8e8e';
 }
 
-function annotationTags(widget: DashboardWidgetPlan): string[] {
-  return widget.sourceEventKeys.map((key) => `event_key:${key}`);
+function eventKeyFilter(widget: DashboardWidgetPlan): string {
+  const keys = widget.sourceEventKeys;
+  if (keys.length === 1) return `event_key="${keys[0]}"`;
+  return `event_key=~"${keys.join('|')}"`;
+}
+
+function promqlForStat(widget: DashboardWidgetPlan): string {
+  return `sum(count_over_time(odd_event_total{${eventKeyFilter(widget)}, source="odd"}[$__range]))`;
+}
+
+function promqlForTimeseries(widget: DashboardWidgetPlan): string {
+  return `sum(count_over_time(odd_event_total{${eventKeyFilter(widget)}, source="odd"}[5m]))`;
 }
 
 function statPanel(id: number, widget: DashboardWidgetPlan, gridPos: GrafanaPanel['gridPos']): GrafanaPanel {
@@ -60,16 +69,15 @@ function statPanel(id: number, widget: DashboardWidgetPlan, gridPos: GrafanaPane
     title: widget.title,
     type: 'stat',
     gridPos,
-    datasource: ANNOTATION_DS,
+    datasource: PROMETHEUS_DS,
     targets: [{
-      datasource: ANNOTATION_DS,
-      matchAny: true,
-      tags: annotationTags(widget),
-      type: 'tags',
+      datasource: PROMETHEUS_DS,
+      expr: promqlForStat(widget),
+      legendFormat: widget.title,
       refId: 'A'
     }],
     options: {
-      reduceOptions: { calcs: ['count'], fields: '', values: false },
+      reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
       colorMode: 'background',
       graphMode: 'none',
       textMode: 'auto'
@@ -94,12 +102,11 @@ function timeseriesPanel(id: number, widget: DashboardWidgetPlan, gridPos: Grafa
     title: widget.title,
     type: 'timeseries',
     gridPos,
-    datasource: ANNOTATION_DS,
+    datasource: PROMETHEUS_DS,
     targets: [{
-      datasource: ANNOTATION_DS,
-      matchAny: true,
-      tags: annotationTags(widget),
-      type: 'tags',
+      datasource: PROMETHEUS_DS,
+      expr: promqlForTimeseries(widget),
+      legendFormat: widget.title,
       refId: 'A'
     }],
     options: {
@@ -223,14 +230,13 @@ function buildGrafanaDashboard(plan: DashboardPlan): Record<string, unknown> {
     schemaVersion: 39,
     version: 0,
     panels,
-    annotations: {
+    templating: {
       list: [{
-        datasource: ANNOTATION_DS,
-        enable: true,
-        name: 'ODD Events',
-        iconColor: 'rgba(0, 211, 255, 1)',
-        type: 'tags',
-        tags: ['source:odd']
+        name: 'DS_PROMETHEUS',
+        type: 'datasource',
+        query: 'prometheus',
+        current: {},
+        hide: 2
       }]
     },
     refresh: '30s',
@@ -260,7 +266,7 @@ export async function buildGrafanaDashboardTerraform(plan: DashboardPlan): Promi
     resource: {
       grafana_dashboard: {
         [name]: {
-          config_json: JSON.stringify(dashboard)
+          config_json: JSON.stringify(dashboard).replace(/\$\{/g, '$$$${')
         }
       }
     }
