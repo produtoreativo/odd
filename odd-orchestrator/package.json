@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "planner": "tsx src/agents/planner/index.ts",
+    "storm-image": "tsx src/agents/storm-image/index.ts",
     "applier": "tsx src/agents/applier/index.ts",
     "check": "tsc -p tsconfig.json --noEmit"
   },
