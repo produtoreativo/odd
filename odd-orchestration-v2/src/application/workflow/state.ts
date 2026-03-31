@@ -1,13 +1,16 @@
 import { Annotation } from '@langchain/langgraph';
-import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventStormingRow, SloSuggestion } from '../../shared/types.js';
+import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, SloSuggestion } from '../../shared/types.js';
 import { ObservabilityProvider } from '../../shared/provider.js';
 
 export const ObservabilityWorkflowGraphState = Annotation.Root({
+  dashboardKey: Annotation<string>(),
   input: Annotation<string>(),
   dashboardTitle: Annotation<string>(),
   outputDir: Annotation<string>(),
+  terraformWorkspaceDir: Annotation<string>(),
   provider: Annotation<ObservabilityProvider>(),
   dryRun: Annotation<boolean>(),
+  eventBurstConfig: Annotation<Partial<EventBurstConfig>>({ default: () => ({}), reducer: (_, right) => right }),
   startFrom: Annotation<'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply'>(),
   endAt: Annotation<'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply'>(),
   rows: Annotation<EventStormingRow[]>({ default: () => [], reducer: (_, right) => right }),

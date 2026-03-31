@@ -12,6 +12,18 @@ E pode executar:
 - o fluxo completo
 - ou uma execução parcial por etapa
 
+Além do `dashboardTitle`, o workflow agora trabalha com um `dashboardKey`, que representa a identidade estável do dashboard de acompanhamento.
+
+- `dashboardTitle`: nome visual exibido no provider
+- `dashboardKey`: identificador técnico usado para isolar artefatos, workspace Terraform e state
+
+Se você não informar `--dashboard-key`, o projeto gera um valor determinístico a partir do provider, do título e da origem da entrada. Quando quiser controlar a identidade de forma estável, informe explicitamente `--dashboard-key`.
+
+Regra prática:
+
+- mude só o `dashboardTitle` quando quiser renomear visualmente o mesmo dashboard
+- mude o `dashboardKey` quando quiser outro dashboard, outro workspace Terraform e outro state
+
 ## Scripts
 
 - `npm run workflow`
@@ -29,6 +41,8 @@ O workflow possui estas etapas:
 5. `terraform`: compilação do dashboard Terraform
 6. `apply`: `terraform init`, `terraform apply` e envio dos eventos para o Datadog em batch
 
+Na etapa `apply`, a ingestão de eventos também pode simular volume recorrente com rajadas periódicas.
+
 ## Entrada
 
 Entradas aceitas:
@@ -45,6 +59,7 @@ npm install
 npm run workflow -- \
   --input ./samples/event-storming-tuangou-project-format.xlsx \
   --dashboard-title "ODD - Tuangou" \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog
 ```
 
@@ -53,8 +68,12 @@ Exemplo com JSON estruturado do event-storming:
 ```bash
 npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments" \
-  --provider datadog
+  --dashboard-title "ODD - Payments - v4" \
+  --dashboard-key "payments-acompanhamento-v4" \
+  --provider datadog \
+  --burst-count 6 \
+  --burst-interval-ms 10000 \
+  --copies-per-event 4
 ```
 
 Providers suportados no workflow:
@@ -80,7 +99,11 @@ Exemplo:
 npm run workflow -- \
   --input ./samples/event-storming-tuangou-project-format.xlsx \
   --dashboard-title "ODD - Tuangou" \
-  --provider datadog
+  --dashboard-key "tuangou-acompanhamento" \
+  --provider datadog \
+  --burst-count 6 \
+  --burst-interval-ms 10000 \
+  --copies-per-event 4
 ```
 
 ## Execução Parcial
@@ -118,8 +141,9 @@ Executar somente `categorize` a partir de `rows.json`:
 
 ```bash
 npm run workflow -- \
-  --rows-file ./generated/<run-id>/rows.json \
+  --rows-file ./generated/<dashboard-key>/<run-id>/rows.json \
   --dashboard-title "ODD - Tuangou" \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog \
   --start-from categorize \
   --end-at categorize
@@ -129,8 +153,9 @@ Executar somente `slos` a partir de `categorized-events.json`:
 
 ```bash
 npm run workflow -- \
-  --categorized-file ./generated/<run-id>/categorized-events.json \
+  --categorized-file ./generated/<dashboard-key>/<run-id>/categorized-events.json \
   --dashboard-title "ODD - Tuangou" \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog \
   --start-from slos \
   --end-at slos
@@ -140,9 +165,10 @@ Executar `plan` e `terraform` a partir dos artefatos intermediários:
 
 ```bash
 npm run workflow -- \
-  --categorized-file ./generated/<run-id>/categorized-events.json \
-  --slo-file ./generated/<run-id>/slo-suggestions.json \
+  --categorized-file ./generated/<dashboard-key>/<run-id>/categorized-events.json \
+  --slo-file ./generated/<dashboard-key>/<run-id>/slo-suggestions.json \
   --dashboard-title "ODD - Tuangou" \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog \
   --start-from plan
 ```
@@ -151,7 +177,8 @@ Executar somente `terraform` a partir de um `plan.json`:
 
 ```bash
 npm run workflow -- \
-  --plan-file ./generated/<run-id>/plan.json \
+  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog \
   --start-from terraform \
   --end-at terraform
@@ -161,10 +188,14 @@ Executar somente `apply` a partir de um `plan.json`:
 
 ```bash
 npm run workflow -- \
-  --plan-file ./generated/<run-id>/plan.json \
+  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
+  --dashboard-key "tuangou-acompanhamento" \
   --provider datadog \
   --start-from apply \
-  --end-at apply
+  --end-at apply \
+  --burst-count 12 \
+  --burst-interval-ms 5000 \
+  --copies-per-event 3
 ```
 
 Arquivos auxiliares suportados na retomada:
@@ -184,13 +215,21 @@ Cada execução grava um diretório em `generated/` com os artefatos produzidos 
 - `plan.json`
 - `custom-events.json`
 - `<provider>-dashboard.auto.tf.json`
+- `dashboard-metadata.json`
 - `apply-report.json` quando a etapa `apply` for executada
 
-O Terraform compilado também é gravado em:
+Quando houver `apply`, o relatório inclui:
 
-- `terraform/generated/`
-- `terraform-dynatrace/generated/`
-- `terraform-grafana/generated/`
+- configuração de rajadas usada no envio
+- total de eventos agendados
+- resultado por evento, rajada e cópia
+
+Isolamento por dashboard:
+
+- artefatos de execução: `generated/<dashboard-key>/<run-id>/`
+- workspace Terraform isolado: `generated/terraform-workspaces/<provider>/<dashboard-key>/`
+
+Nesse workspace ficam o `state`, os arquivos `.tf` base e o dashboard compilado daquele dashboard específico.
 
 ## Ambiente
 
@@ -230,18 +269,34 @@ Dry run:
 
 ```bash
 npm run applier -- \
-  --terraform-dir ./terraform \
-  --events-file ./generated/<run-id>/custom-events.json \
-  --dry-run
+  --events-file ./generated/<dashboard-key>/<run-id>/custom-events.json \
+  --dashboard-key "payments-acompanhamento" \
+  --dry-run \
+  --burst-count 6 \
+  --burst-interval-ms 10000 \
+  --copies-per-event 4
 ```
 
 Execução real:
 
 ```bash
 npm run applier -- \
-  --terraform-dir ./terraform \
-  --events-file ./generated/<run-id>/custom-events.json
+  --events-file ./generated/<dashboard-key>/<run-id>/custom-events.json \
+  --dashboard-key "payments-acompanhamento" \
+  --burst-count 6 \
+  --burst-interval-ms 10000 \
+  --copies-per-event 4
 ```
+
+Se quiser sobrescrever o workspace resolvido automaticamente, ainda pode usar `--terraform-dir`.
+
+Parâmetros opcionais da simulação de rajadas:
+
+- `--burst-count`: quantas rajadas enviar
+- `--burst-interval-ms`: tempo de espera entre uma rajada e a próxima
+- `--copies-per-event`: quantas cópias de cada evento enviar dentro de cada rajada
+
+Esses parâmetros são úteis para simular padrões mais próximos dos SLOs do fluxo, por exemplo volume recorrente, janelas de pico e repetição de eventos de sucesso ou falha ao longo do tempo.
 
 Variáveis necessárias para apply real no Datadog:
 
@@ -250,6 +305,20 @@ Variáveis necessárias para apply real no Datadog:
 - `DD_SITE` opcional
 - `DD_API_BASE_URL` opcional
 - `DD_EVENT_BATCH_SIZE` opcional
+- `DD_EVENT_BURST_COUNT` opcional
+- `DD_EVENT_BURST_INTERVAL_MS` opcional
+- `DD_EVENT_BURST_REPEAT_PER_EVENT` opcional
+
+## Recomendação de Identidade
+
+Se `dashboardTitle` não for suficiente, use um `dashboardKey` funcional e estável, por exemplo:
+
+- `payments-acompanhamento`
+- `payments-checkout-acompanhamento`
+- `billing-cobranca-operacao`
+- `tuangou-formacao-de-grupos`
+
+Para um dashboard de acompanhamento, prefira um identificador ligado ao fluxo monitorado, não à versão do nome visual.
 
 ## Observação
 

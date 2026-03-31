@@ -88,8 +88,8 @@ const GRID = {
   sectionGap: 1
 };
 
-function resourceName(title: string): string {
-  return title
+function resourceName(key: string): string {
+  return key
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
@@ -413,9 +413,9 @@ function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboar
   return document;
 }
 
-export async function buildDynatraceDashboardTerraform(plan: DashboardPlan): Promise<Record<string, unknown>> {
+export async function buildDynatraceDashboardTerraform(plan: DashboardPlan, dashboardKey: string): Promise<Record<string, unknown>> {
   const document = buildDynatraceDashboardDocument(plan);
-  const name = resourceName(plan.dashboardTitle);
+  const name = resourceName(dashboardKey);
 
   return {
     resource: {

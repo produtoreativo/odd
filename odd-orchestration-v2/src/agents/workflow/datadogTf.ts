@@ -292,17 +292,17 @@ function validate(terraformJson: Record<string, unknown>, dashboardName: string)
   }
 }
 
-function resourceName(title: string): string {
-  return title
+function resourceName(key: string): string {
+  return key
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '') || 'odd_dashboard';
 }
 
-export async function buildDatadogDashboardTerraform(plan: DashboardPlan): Promise<Record<string, unknown>> {
+export async function buildDatadogDashboardTerraform(plan: DashboardPlan, dashboardKey: string): Promise<Record<string, unknown>> {
   const dashboardObject = buildDashboardObject(plan);
-  const name = resourceName(plan.dashboardTitle);
+  const name = resourceName(dashboardKey);
   const terraformJson = {
     resource: {
       datadog_dashboard_json: {

@@ -5,8 +5,10 @@ import { parseProvider } from '../../shared/provider.js';
 import { Logger } from '../../shared/logger.js';
 import { loadDotEnv } from '../../infrastructure/env/load-dot-env.js';
 import { buildObservabilityWorkflow } from '../../application/workflow/build-observability-workflow.js';
+import { prepareTerraformWorkspace } from '../../infrastructure/terraform/workspace.js';
+import { buildDashboardKey } from '../../shared/dashboard-identity.js';
 import { readPlanningInput } from '../../shared/input.js';
-import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventStormingRow, SloSuggestion } from '../../shared/types.js';
+import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, SloSuggestion } from '../../shared/types.js';
 
 const logger = new Logger('workflow-entrypoint');
 
@@ -24,6 +26,7 @@ async function main() {
   const startFrom = parseStepArg(args['start-from'], 'input');
   const endAt = parseStepArg(args['end-at'], provider === 'datadog' ? 'apply' : 'terraform');
   const dryRun = args['dry-run'] === true;
+  const eventBurstConfig = resolveBurstArgs(args);
   const baseOutput = typeof args.output === 'string' ? args.output : './generated';
   const input = typeof args.input === 'string' ? args.input : undefined;
   const preloadedState = await loadPreloadedState(args, startFrom, input);
@@ -31,15 +34,35 @@ async function main() {
     ? args['dashboard-title']
     : preloadedState.plan?.dashboardTitle
       || inferDashboardTitle(input, startFrom);
+  const dashboardKey = buildDashboardKey({
+    dashboardTitle,
+    provider,
+    explicitKey: typeof args['dashboard-key'] === 'string' ? args['dashboard-key'] : undefined,
+    identitySource: resolveDashboardIdentitySource(args, input, startFrom)
+  });
   const inputName = resolveInputName(input, args, startFrom);
-  const outputDir = path.resolve(process.cwd(), baseOutput, `${inputName}_${buildRunId()}`);
+  const runId = buildRunId();
+  const outputDir = path.resolve(process.cwd(), baseOutput, dashboardKey, runId);
+  const terraformWorkspaceDir = path.resolve(process.cwd(), baseOutput, 'terraform-workspaces', provider, dashboardKey);
   await ensureDir(outputDir);
+  await prepareTerraformWorkspace(provider, terraformWorkspaceDir);
 
   if (endAt === 'apply' && provider !== 'datadog') {
     throw new Error(`Etapa apply no workflow ainda não suportada para provider ${provider}.`);
   }
 
-  logger.info('Iniciando workflow v2', { input, dashboardTitle, provider, outputDir, startFrom, endAt, dryRun });
+  logger.info('Iniciando workflow v2', {
+    input,
+    dashboardTitle,
+    dashboardKey,
+    provider,
+    outputDir,
+    terraformWorkspaceDir,
+    startFrom,
+    endAt,
+    dryRun,
+    eventBurstConfig
+  });
   logger.debug('Estado pré-carregado resolvido', {
     preloadedRows: preloadedState.rows.length,
     hasCategorized: Boolean(preloadedState.categorized),
@@ -49,11 +72,14 @@ async function main() {
 
   const workflow = buildObservabilityWorkflow();
   const result = await workflow.invoke({
+    dashboardKey,
     input: input ? path.resolve(process.cwd(), input) : '',
     dashboardTitle,
     provider,
     outputDir,
+    terraformWorkspaceDir,
     dryRun,
+    eventBurstConfig,
     startFrom,
     endAt,
     rows: preloadedState.rows,
@@ -62,16 +88,12 @@ async function main() {
     plan: preloadedState.plan
   });
 
-  const terraformDir = provider === 'dynatrace'
-    ? 'terraform-dynatrace'
-    : provider === 'grafana'
-      ? 'terraform-grafana'
-      : 'terraform';
-
-  await persistArtifacts(outputDir, provider, inputName, terraformDir, result);
+  await persistArtifacts(outputDir, provider, inputName, dashboardTitle, dashboardKey, terraformWorkspaceDir, result);
 
   logger.info('Workflow v2 finalizado', {
     outputDir,
+    dashboardKey,
+    terraformWorkspaceDir,
     provider,
     rowCount: result.rows.length,
     startFrom,
@@ -79,6 +101,28 @@ async function main() {
     dryRun,
     hasApplyReport: Boolean(result.applyReport)
   });
+}
+
+function resolveBurstArgs(args: Record<string, string | boolean>): Partial<EventBurstConfig> {
+  return {
+    burstCount: parseOptionalIntegerArg(args, 'burst-count'),
+    burstIntervalMs: parseOptionalIntegerArg(args, 'burst-interval-ms'),
+    copiesPerEvent: parseOptionalIntegerArg(args, 'copies-per-event')
+  };
+}
+
+function parseOptionalIntegerArg(args: Record<string, string | boolean>, key: string): number | undefined {
+  const value = args[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Valor inválido para --${key}: ${value}`);
+  }
+
+  return parsed;
 }
 
 main().catch((error) => {
@@ -197,7 +241,9 @@ async function persistArtifacts(
   outputDir: string,
   provider: 'datadog' | 'dynatrace' | 'grafana',
   inputName: string,
-  terraformDir: string,
+  dashboardTitle: string,
+  dashboardKey: string,
+  terraformWorkspaceDir: string,
   result: {
     rows: EventStormingRow[];
     categorized: CategorizedEvents | null;
@@ -211,6 +257,12 @@ async function persistArtifacts(
     logger.debug('Persistindo rows.json', { outputDir, rowCount: result.rows.length });
     await writeJsonFile(path.join(outputDir, 'rows.json'), result.rows);
   }
+  await writeJsonFile(path.join(outputDir, 'dashboard-metadata.json'), {
+    dashboardKey,
+    dashboardTitle: result.plan?.dashboardTitle ?? dashboardTitle,
+    provider,
+    terraformWorkspaceDir
+  });
   if (result.categorized) {
     logger.debug('Persistindo categorized-events.json', {
       outputDir,
@@ -238,11 +290,15 @@ async function persistArtifacts(
     logger.debug('Persistindo Terraform compilado', {
       outputDir,
       provider,
-      terraformDir,
-      inputName
+      terraformWorkspaceDir,
+      inputName,
+      dashboardKey
     });
     await writeJsonFile(path.join(outputDir, `${provider}-dashboard.auto.tf.json`), result.terraformJson);
-    await writeJsonFile(path.join(process.cwd(), terraformDir, 'generated', `${inputName}-dashboard.auto.tf.json`), result.terraformJson);
+    await writeJsonFile(
+      path.join(terraformWorkspaceDir, 'generated', `${provider}-${dashboardKey}-dashboard.auto.tf.json`),
+      result.terraformJson
+    );
   }
   if (result.applyReport) {
     logger.debug('Persistindo apply-report.json do workflow', {
@@ -258,6 +314,23 @@ function inferDashboardTitle(input: string | undefined, startFrom: string): stri
     return path.basename(input, path.extname(input));
   }
   return `odd-${startFrom}`;
+}
+
+function resolveDashboardIdentitySource(
+  args: Record<string, string | boolean>,
+  input: string | undefined,
+  startFrom: string
+): string {
+  const sources = [
+    input,
+    typeof args['rows-file'] === 'string' ? args['rows-file'] : undefined,
+    typeof args['categorized-file'] === 'string' ? args['categorized-file'] : undefined,
+    typeof args['slo-file'] === 'string' ? args['slo-file'] : undefined,
+    typeof args['plan-file'] === 'string' ? args['plan-file'] : undefined,
+    startFrom
+  ].filter((value): value is string => typeof value === 'string' && value.trim() !== '');
+
+  return sources.join('|');
 }
 
 function resolveInputName(

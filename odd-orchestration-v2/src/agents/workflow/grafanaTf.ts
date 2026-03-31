@@ -258,9 +258,9 @@ function validate(terraformJson: Record<string, unknown>, name: string): void {
   }
 }
 
-export async function buildGrafanaDashboardTerraform(plan: DashboardPlan): Promise<Record<string, unknown>> {
+export async function buildGrafanaDashboardTerraform(plan: DashboardPlan, dashboardKey: string): Promise<Record<string, unknown>> {
   const dashboard = buildGrafanaDashboard(plan);
-  const name = resourceName(plan.dashboardTitle);
+  const name = resourceName(dashboardKey);
   const terraformJson = {
     resource: {
       grafana_dashboard: {

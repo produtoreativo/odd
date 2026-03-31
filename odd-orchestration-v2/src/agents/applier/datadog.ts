@@ -1,6 +1,6 @@
 import { readJsonFile } from '../../shared/fs.js';
 import { Logger } from '../../shared/logger.js';
-import { CustomEventPayload, EventIngestionResult } from '../../shared/types.js';
+import { CustomEventPayload, EventBurstConfig, EventIngestionResult } from '../../shared/types.js';
 
 const logger = new Logger('applier-datadog');
 
@@ -13,52 +13,84 @@ export async function readEvents(filePath: string): Promise<CustomEventPayload[]
   return events;
 }
 
-export async function ingestEvents(filePath: string, dryRun: boolean): Promise<EventIngestionResult[]> {
+export async function ingestEvents(
+  filePath: string,
+  dryRun: boolean,
+  burstOverrides: Partial<EventBurstConfig> = {}
+): Promise<{
+  burstConfig: EventBurstConfig;
+  scheduledEventsCount: number;
+  results: EventIngestionResult[];
+}> {
   const events = await readEvents(filePath);
   const batchSize = resolveBatchSize();
+  const burstConfig = resolveBurstConfig(burstOverrides);
+  const scheduledEventsCount = events.length * burstConfig.burstCount * burstConfig.copiesPerEvent;
   logger.info('Iniciando ingestão Datadog', {
     filePath,
     dryRun,
     eventCount: events.length,
-    batchSize
+    batchSize,
+    burstCount: burstConfig.burstCount,
+    burstIntervalMs: burstConfig.burstIntervalMs,
+    copiesPerEvent: burstConfig.copiesPerEvent,
+    scheduledEventsCount
   });
 
   if (dryRun) {
     logger.info('Ingestão Datadog em dry-run concluída', {
-      eventCount: events.length
+      scheduledEventsCount
     });
-    return events.map((event) => ({
-      title: event.title,
-      status: 'dry-run'
-    }));
+    return {
+      burstConfig,
+      scheduledEventsCount,
+      results: expandEventsForSimulation(events, burstConfig).map((item) => ({
+        title: item.event.title,
+        burstIndex: item.burstIndex,
+        copyIndex: item.copyIndex,
+        status: 'dry-run'
+      }))
+    };
   }
 
   const results: EventIngestionResult[] = [];
-  for (let index = 0; index < events.length; index += batchSize) {
-    const chunk = events.slice(index, index + batchSize);
+  const scheduledEvents = expandEventsForSimulation(events, burstConfig);
+
+  for (let index = 0; index < scheduledEvents.length; index += batchSize) {
+    const chunk = scheduledEvents.slice(index, index + batchSize);
+    const burstIndex = chunk[0]?.burstIndex ?? 0;
     logger.debug('Enviando lote de eventos Datadog', {
       chunkStart: index,
-      chunkSize: chunk.length
+      chunkSize: chunk.length,
+      burstIndex
     });
     const chunkResults = await Promise.all(
-      chunk.map(async (event) => {
+      chunk.map(async ({ event, burstIndex: eventBurstIndex, copyIndex }) => {
         try {
           const response = await sendEvent(event);
           logger.debug('Evento Datadog enviado', {
-            title: event.title
+            title: event.title,
+            burstIndex: eventBurstIndex,
+            copyIndex
           });
           return {
             title: event.title,
+            burstIndex: eventBurstIndex,
+            copyIndex,
             status: 'sent',
             response
           } satisfies EventIngestionResult;
         } catch (error) {
           logger.warn('Falha no envio de evento Datadog', {
             title: event.title,
+            burstIndex: eventBurstIndex,
+            copyIndex,
             error: error instanceof Error ? error.message : String(error)
           });
           return {
             title: event.title,
+            burstIndex: eventBurstIndex,
+            copyIndex,
             status: 'failed',
             error: error instanceof Error ? error.message : String(error)
           } satisfies EventIngestionResult;
@@ -66,13 +98,28 @@ export async function ingestEvents(filePath: string, dryRun: boolean): Promise<E
       })
     );
     results.push(...chunkResults);
+
+    const nextBurstIndex = scheduledEvents[index + chunk.length]?.burstIndex;
+    if (nextBurstIndex && nextBurstIndex !== burstIndex && burstConfig.burstIntervalMs > 0) {
+      logger.info('Aguardando próxima rajada de eventos', {
+        currentBurstIndex: burstIndex,
+        nextBurstIndex,
+        waitMs: burstConfig.burstIntervalMs
+      });
+      await wait(burstConfig.burstIntervalMs);
+    }
   }
 
   logger.info('Ingestão Datadog concluída', {
     total: results.length,
-    failed: results.filter((item) => item.status === 'failed').length
+    failed: results.filter((item) => item.status === 'failed').length,
+    scheduledEventsCount
   });
-  return results;
+  return {
+    burstConfig,
+    scheduledEventsCount,
+    results
+  };
 }
 
 function resolveBatchSize(): number {
@@ -83,6 +130,79 @@ function resolveBatchSize(): number {
 
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+}
+
+function resolveBurstConfig(overrides: Partial<EventBurstConfig>): EventBurstConfig {
+  return {
+    burstCount: resolvePositiveInteger(overrides.burstCount, process.env.DD_EVENT_BURST_COUNT, 1),
+    burstIntervalMs: resolveNonNegativeInteger(overrides.burstIntervalMs, process.env.DD_EVENT_BURST_INTERVAL_MS, 0),
+    copiesPerEvent: resolvePositiveInteger(overrides.copiesPerEvent, process.env.DD_EVENT_BURST_REPEAT_PER_EVENT, 1)
+  };
+}
+
+function resolvePositiveInteger(override: number | undefined, envValue: string | undefined, fallback: number): number {
+  if (Number.isFinite(override) && (override as number) > 0) {
+    return override as number;
+  }
+
+  const parsed = envValue ? Number.parseInt(envValue, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function resolveNonNegativeInteger(override: number | undefined, envValue: string | undefined, fallback: number): number {
+  if (Number.isFinite(override) && (override as number) >= 0) {
+    return override as number;
+  }
+
+  const parsed = envValue ? Number.parseInt(envValue, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function expandEventsForSimulation(events: CustomEventPayload[], burstConfig: EventBurstConfig) {
+  const expanded: Array<{ event: CustomEventPayload; burstIndex: number; copyIndex: number }> = [];
+
+  for (let burstIndex = 1; burstIndex <= burstConfig.burstCount; burstIndex += 1) {
+    for (const baseEvent of events) {
+      for (let copyIndex = 1; copyIndex <= burstConfig.copiesPerEvent; copyIndex += 1) {
+        expanded.push({
+          event: withSimulationMetadata(baseEvent, burstIndex, copyIndex, burstConfig),
+          burstIndex,
+          copyIndex
+        });
+      }
+    }
+  }
+
+  return expanded;
+}
+
+function withSimulationMetadata(
+  event: CustomEventPayload,
+  burstIndex: number,
+  copyIndex: number,
+  burstConfig: EventBurstConfig
+): CustomEventPayload {
+  const tags = [
+    ...event.tags,
+    'simulation:true',
+    'simulation_profile:periodic_burst',
+    `simulation_burst:${burstIndex}`,
+    `simulation_copy:${copyIndex}`,
+    `simulation_copies_per_event:${burstConfig.copiesPerEvent}`,
+    `simulation_total_bursts:${burstConfig.burstCount}`
+  ];
+
+  return {
+    ...event,
+    text: `${event.text}\n\nSimulation burst ${burstIndex}/${burstConfig.burstCount}, copy ${copyIndex}/${burstConfig.copiesPerEvent}.`,
+    tags
+  };
+}
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function sendEvent(event: CustomEventPayload): Promise<unknown> {

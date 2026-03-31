@@ -6,6 +6,7 @@ import { buildDynatraceDashboardTerraform } from '../../agents/workflow/dynatrac
 import { buildGrafanaDashboardTerraform } from '../../agents/workflow/grafanaTf.js';
 import { DashboardPlanSchema, CategorizedEventsSchema, SloSuggestionSchema } from '../../domain/contracts.js';
 import { BedrockJsonAgent, parseBedrockJsonResponse } from '../../infrastructure/llm/bedrock-json-agent.js';
+import { writeTerraformWorkspaceArtifact } from '../../infrastructure/terraform/workspace.js';
 import { ensureDir } from '../../shared/fs.js';
 import { readPlanningInput } from '../../shared/input.js';
 import { Logger } from '../../shared/logger.js';
@@ -161,18 +162,28 @@ export async function compileTerraformNode(state: ObservabilityWorkflowState) {
 
   logger.info('Etapa terraform iniciada', {
     provider: state.provider,
+    dashboardKey: state.dashboardKey,
     dashboardTitle: state.plan.dashboardTitle,
-    customEvents: state.plan.customEvents.length
+    customEvents: state.plan.customEvents.length,
+    terraformWorkspaceDir: state.terraformWorkspaceDir
   });
   const terraformJson = state.provider === 'dynatrace'
-    ? await buildDynatraceDashboardTerraform(state.plan)
+    ? await buildDynatraceDashboardTerraform(state.plan, state.dashboardKey)
     : state.provider === 'grafana'
-      ? await buildGrafanaDashboardTerraform(state.plan)
-      : await buildDatadogDashboardTerraform(state.plan);
+      ? await buildGrafanaDashboardTerraform(state.plan, state.dashboardKey)
+      : await buildDatadogDashboardTerraform(state.plan, state.dashboardKey);
+
+  const terraformArtifactPath = await writeTerraformWorkspaceArtifact(
+    state.terraformWorkspaceDir,
+    state.provider,
+    state.dashboardKey,
+    terraformJson
+  );
 
   logger.info('Etapa terraform concluída', {
     provider: state.provider,
-    rootKeys: Object.keys(terraformJson)
+    rootKeys: Object.keys(terraformJson),
+    terraformArtifactPath
   });
   return { terraformJson };
 }
@@ -188,20 +199,24 @@ export async function applyDatadogNode(state: ObservabilityWorkflowState) {
 
   logger.info('Etapa apply iniciada', {
     provider: state.provider,
+    dashboardKey: state.dashboardKey,
     dryRun: state.dryRun,
-    customEvents: state.plan.customEvents.length
+    customEvents: state.plan.customEvents.length,
+    eventBurstConfig: state.eventBurstConfig,
+    terraformWorkspaceDir: state.terraformWorkspaceDir
   });
 
-  const terraformDir = path.resolve(process.cwd(), 'terraform');
   const eventsFile = path.join(state.outputDir, 'custom-events.json');
   await ensureDir(state.outputDir);
   await writeFile(eventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
 
   const applyReport = await applyDatadog({
-    terraformDir,
+    dashboardKey: state.dashboardKey,
+    terraformDir: state.terraformWorkspaceDir,
     eventsFile,
     outputDir: state.outputDir,
-    dryRun: state.dryRun
+    dryRun: state.dryRun,
+    burstConfig: state.eventBurstConfig
   });
 
   logger.info('Etapa apply concluída', {

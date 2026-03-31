@@ -65,6 +65,12 @@ export type CustomEventPayload = {
   aggregation_key?: string;
 };
 
+export type EventBurstConfig = {
+  burstCount: number;
+  burstIntervalMs: number;
+  copiesPerEvent: number;
+};
+
 export type DashboardPlan = {
   dashboardTitle: string;
   bands: DashboardBandPlan[];
@@ -75,6 +81,8 @@ export type DashboardPlan = {
 
 export type EventIngestionResult = {
   title: string;
+  burstIndex: number;
+  copyIndex: number;
   status: 'sent' | 'dry-run' | 'failed';
   response?: unknown;
   error?: string;
@@ -82,9 +90,12 @@ export type EventIngestionResult = {
 
 export type DatadogApplyReport = {
   provider: 'datadog';
+  dashboardKey: string;
   dryRun: boolean;
   terraformDir: string;
   eventsFile: string;
+  burstConfig: EventBurstConfig;
+  scheduledEventsCount: number;
   terraformCommands: string[];
   terraformError?: string;
   failedEventsCount: number;
