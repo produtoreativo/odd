@@ -220,8 +220,7 @@ function buildGrafanaDashboard(plan: DashboardPlan): Record<string, unknown> {
   nextId = successKpisResult.nextId;
   nextTop = successKpisResult.nextTop;
 
-  const successTrendsResult = buildBandPanels(panels, nextId, successTrends, 'Sucessos por etapa', nextTop, GRID.trendHeight);
-  void successTrendsResult;
+  buildBandPanels(panels, nextId, successTrends, 'Sucessos por etapa', nextTop, GRID.trendHeight);
 
   return {
     title: plan.dashboardTitle,

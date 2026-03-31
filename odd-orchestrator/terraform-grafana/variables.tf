@@ -1,10 +1,8 @@
 variable "grafana_url" {
-  type    = string
-  default = ""
+  type = string
 }
 
 variable "grafana_auth" {
   type      = string
   sensitive = true
-  default   = ""
 }
