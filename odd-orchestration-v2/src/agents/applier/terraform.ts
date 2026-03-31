@@ -63,8 +63,22 @@ function exec(command: string, args: readonly string[], cwd: string, env: NodeJS
     });
     const child = spawn(command, [...args], {
       cwd: path.resolve(cwd),
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
       env
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      process.stdout.write(text);
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(text);
     });
 
     child.on('exit', (code) => {
@@ -80,9 +94,15 @@ function exec(command: string, args: readonly string[], cwd: string, env: NodeJS
       logger.error('Comando terraform falhou', {
         command,
         args: args.join(' '),
-        exitCode: code ?? 'null'
+        exitCode: code ?? 'null',
+        stderr: tail(stderr),
+        stdout: tail(stdout)
       });
-      reject(new Error(`Falha ao executar ${command} ${args.join(' ')}. Exit code: ${code ?? 'null'}`));
+      reject(new Error([
+        `Falha ao executar ${command} ${args.join(' ')}. Exit code: ${code ?? 'null'}.`,
+        stderr.trim() !== '' ? `stderr: ${tail(stderr)}` : '',
+        stdout.trim() !== '' ? `stdout: ${tail(stdout)}` : ''
+      ].filter(Boolean).join(' ')));
     });
 
     child.on('error', (error) => {
@@ -94,4 +114,13 @@ function exec(command: string, args: readonly string[], cwd: string, env: NodeJS
       reject(error);
     });
   });
+}
+
+function tail(value: string, limit = 1200): string {
+  const normalized = value.trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return normalized.slice(normalized.length - limit);
 }

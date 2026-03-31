@@ -85,7 +85,9 @@ async function main() {
     rows: preloadedState.rows,
     categorized: preloadedState.categorized,
     sloSuggestions: preloadedState.sloSuggestions,
-    plan: preloadedState.plan
+    plan: preloadedState.plan,
+    dashboardTerraformJson: null,
+    sloTerraformJson: null
   });
 
   await persistArtifacts(outputDir, provider, inputName, dashboardTitle, dashboardKey, terraformWorkspaceDir, result);
@@ -249,6 +251,8 @@ async function persistArtifacts(
     categorized: CategorizedEvents | null;
     sloSuggestions: SloSuggestion[];
     plan: DashboardPlan | null;
+    dashboardTerraformJson: Record<string, unknown> | null;
+    sloTerraformJson: Record<string, unknown> | null;
     terraformJson: Record<string, unknown> | null;
     applyReport: DatadogApplyReport | null;
   }
@@ -286,7 +290,7 @@ async function persistArtifacts(
     await writeJsonFile(path.join(outputDir, 'plan.json'), result.plan);
     await writeJsonFile(path.join(outputDir, 'custom-events.json'), result.plan.customEvents);
   }
-  if (result.terraformJson) {
+  if (result.dashboardTerraformJson) {
     logger.debug('Persistindo Terraform compilado', {
       outputDir,
       provider,
@@ -294,7 +298,23 @@ async function persistArtifacts(
       inputName,
       dashboardKey
     });
-    await writeJsonFile(path.join(outputDir, `${provider}-dashboard.auto.tf.json`), result.terraformJson);
+    await writeJsonFile(path.join(outputDir, `${provider}-dashboard.auto.tf.json`), result.dashboardTerraformJson);
+  }
+  if (result.sloTerraformJson && Object.keys(result.sloTerraformJson).length > 0) {
+    logger.debug('Persistindo Terraform de SLOs', {
+      outputDir,
+      provider,
+      dashboardKey
+    });
+    await writeJsonFile(path.join(outputDir, `${provider}-slos.auto.tf.json`), result.sloTerraformJson);
+  }
+  if (result.terraformJson) {
+    logger.debug('Persistindo bundle Terraform compilado', {
+      outputDir,
+      provider,
+      dashboardKey
+    });
+    await writeJsonFile(path.join(outputDir, `${provider}-bundle.auto.tf.json`), result.terraformJson);
     await writeJsonFile(
       path.join(terraformWorkspaceDir, 'generated', `${provider}-${dashboardKey}-dashboard.auto.tf.json`),
       result.terraformJson

@@ -17,6 +17,8 @@ export const ObservabilityWorkflowGraphState = Annotation.Root({
   categorized: Annotation<CategorizedEvents | null>({ default: () => null, reducer: (_, right) => right }),
   sloSuggestions: Annotation<SloSuggestion[]>({ default: () => [], reducer: (_, right) => right }),
   plan: Annotation<DashboardPlan | null>({ default: () => null, reducer: (_, right) => right }),
+  dashboardTerraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
+  sloTerraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
   terraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
   applyReport: Annotation<DatadogApplyReport | null>({ default: () => null, reducer: (_, right) => right })
 });

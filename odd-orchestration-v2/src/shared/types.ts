@@ -88,6 +88,13 @@ export type EventIngestionResult = {
   error?: string;
 };
 
+export type MetricIngestionResult = {
+  metric: string;
+  status: 'sent' | 'dry-run' | 'failed';
+  points: number;
+  error?: string;
+};
+
 export type DatadogApplyReport = {
   provider: 'datadog';
   dashboardKey: string;
@@ -100,4 +107,12 @@ export type DatadogApplyReport = {
   terraformError?: string;
   failedEventsCount: number;
   ingestedEvents: EventIngestionResult[];
+  failedMetricsCount: number;
+  ingestedMetrics: MetricIngestionResult[];
+};
+
+export type TerraformArtifacts = {
+  dashboard: Record<string, unknown> | null;
+  slos: Record<string, unknown> | null;
+  bundle: Record<string, unknown> | null;
 };

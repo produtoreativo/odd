@@ -12,7 +12,7 @@ export function routeFromStart(state: ObservabilityWorkflowState) {
     case 'terraform':
       return 'compile_terraform';
     case 'apply':
-      return 'apply_datadog';
+      return 'compile_terraform';
     default:
       return 'load_input';
   }
@@ -34,6 +34,10 @@ export function routeAfterPlan(state: ObservabilityWorkflowState) {
   return state.endAt === 'plan' ? END : 'compile_terraform';
 }
 
-export function routeAfterTerraform(state: ObservabilityWorkflowState) {
+export function routeAfterDashboardTerraform() {
+  return 'compile_slo_terraform';
+}
+
+export function routeAfterSloTerraform(state: ObservabilityWorkflowState) {
   return state.endAt === 'terraform' ? END : 'apply_datadog';
 }

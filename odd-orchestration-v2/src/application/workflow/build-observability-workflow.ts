@@ -5,14 +5,16 @@ import {
   buildPlanNode,
   categorizeEventsNode,
   compileTerraformNode,
+  compileSloTerraformNode,
   loadInputNode,
   suggestSlosNode
 } from './nodes.js';
 import {
   routeAfterCategorize,
+  routeAfterDashboardTerraform,
   routeAfterInput,
   routeAfterPlan,
-  routeAfterTerraform,
+  routeAfterSloTerraform,
   routeAfterSlos,
   routeFromStart
 } from './routes.js';
@@ -24,13 +26,15 @@ export function buildObservabilityWorkflow() {
     .addNode('suggest_slos', suggestSlosNode)
     .addNode('build_plan', buildPlanNode)
     .addNode('compile_terraform', compileTerraformNode)
+    .addNode('compile_slo_terraform', compileSloTerraformNode)
     .addNode('apply_datadog', applyDatadogNode)
     .addConditionalEdges(START, routeFromStart)
     .addConditionalEdges('load_input', routeAfterInput)
     .addConditionalEdges('categorize_events', routeAfterCategorize)
     .addConditionalEdges('suggest_slos', routeAfterSlos)
     .addConditionalEdges('build_plan', routeAfterPlan)
-    .addConditionalEdges('compile_terraform', routeAfterTerraform)
+    .addConditionalEdges('compile_terraform', routeAfterDashboardTerraform)
+    .addConditionalEdges('compile_slo_terraform', routeAfterSloTerraform)
     .addEdge('apply_datadog', END)
     .compile();
 }

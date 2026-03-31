@@ -38,8 +38,11 @@ O workflow possui estas etapas:
 2. `categorize`: separação dos eventos em `problems` e `normal`
 3. `slos`: sugestão de 3 a 5 SLOs
 4. `plan`: geração do `plan.json`
-5. `terraform`: compilação do dashboard Terraform
-6. `apply`: `terraform init`, `terraform apply` e envio dos eventos para o Datadog em batch
+5. `terraform`: compilação do Terraform do dashboard
+6. `slo_terraform`: compilação do Terraform dos SLOs sugeridos
+7. `apply`: `terraform init`, `terraform apply`, envio dos eventos para o Datadog em batch e envio das métricas sintéticas dos SLOs
+
+Na CLI, `--end-at terraform` continua representando o fechamento do bundle Terraform completo. Internamente o workflow passa por dashboard Terraform e SLO Terraform antes de encerrar ou aplicar.
 
 Na etapa `apply`, a ingestão de eventos também pode simular volume recorrente com rajadas periódicas.
 
@@ -91,6 +94,7 @@ Sem parâmetros extras de etapa, o comando executa tudo:
 - `slos`
 - `plan`
 - `terraform`
+- `slo_terraform`
 - `apply` para `datadog`
 
 Exemplo:
@@ -161,6 +165,7 @@ npm run workflow -- \
   --end-at slos
 ```
 
+
 Executar `plan` e `terraform` a partir dos artefatos intermediários:
 
 ```bash
@@ -215,6 +220,8 @@ Cada execução grava um diretório em `generated/` com os artefatos produzidos 
 - `plan.json`
 - `custom-events.json`
 - `<provider>-dashboard.auto.tf.json`
+- `<provider>-slos.auto.tf.json` quando houver suporte de provider
+- `<provider>-bundle.auto.tf.json`
 - `dashboard-metadata.json`
 - `apply-report.json` quando a etapa `apply` for executada
 
@@ -223,6 +230,7 @@ Quando houver `apply`, o relatório inclui:
 - configuração de rajadas usada no envio
 - total de eventos agendados
 - resultado por evento, rajada e cópia
+- resultado do envio das métricas sintéticas dos SLOs
 
 Isolamento por dashboard:
 
@@ -230,6 +238,8 @@ Isolamento por dashboard:
 - workspace Terraform isolado: `generated/terraform-workspaces/<provider>/<dashboard-key>/`
 
 Nesse workspace ficam o `state`, os arquivos `.tf` base e o dashboard compilado daquele dashboard específico.
+O bundle Terraform final inclui o dashboard e, quando suportado, os recursos de SLO.
+No Datadog, os SLOs são gerados como `metric SLOs`, não por `monitor_ids`.
 
 ## Ambiente
 

@@ -1,15 +1,17 @@
 import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { applyDatadog } from '../../agents/applier/index.js';
+import { buildDatadogSloTerraform } from '../../agents/workflow/datadogSloTf.js';
 import { buildDatadogDashboardTerraform } from '../../agents/workflow/datadogTf.js';
 import { buildDynatraceDashboardTerraform } from '../../agents/workflow/dynatraceTf.js';
 import { buildGrafanaDashboardTerraform } from '../../agents/workflow/grafanaTf.js';
 import { DashboardPlanSchema, CategorizedEventsSchema, SloSuggestionSchema } from '../../domain/contracts.js';
 import { BedrockJsonAgent, parseBedrockJsonResponse } from '../../infrastructure/llm/bedrock-json-agent.js';
 import { writeTerraformWorkspaceArtifact } from '../../infrastructure/terraform/workspace.js';
-import { ensureDir } from '../../shared/fs.js';
+import { ensureDir, writeJsonFile } from '../../shared/fs.js';
 import { readPlanningInput } from '../../shared/input.js';
 import { Logger } from '../../shared/logger.js';
+import { mergeTerraformJson } from '../../shared/terraform-json.js';
 import { DashboardPlan, EventStormingRow, SloSuggestion } from '../../shared/types.js';
 import { ObservabilityWorkflowState } from './state.js';
 
@@ -167,11 +169,35 @@ export async function compileTerraformNode(state: ObservabilityWorkflowState) {
     customEvents: state.plan.customEvents.length,
     terraformWorkspaceDir: state.terraformWorkspaceDir
   });
-  const terraformJson = state.provider === 'dynatrace'
+  const dashboardTerraformJson = state.provider === 'dynatrace'
     ? await buildDynatraceDashboardTerraform(state.plan, state.dashboardKey)
     : state.provider === 'grafana'
       ? await buildGrafanaDashboardTerraform(state.plan, state.dashboardKey)
       : await buildDatadogDashboardTerraform(state.plan, state.dashboardKey);
+
+  logger.info('Etapa terraform concluída', {
+    provider: state.provider,
+    rootKeys: Object.keys(dashboardTerraformJson)
+  });
+  return { dashboardTerraformJson };
+}
+
+export async function compileSloTerraformNode(state: ObservabilityWorkflowState) {
+  if (!state.plan) {
+    throw new Error('Estado inválido: plan ausente para SLO terraform.');
+  }
+
+  logger.info('Etapa slo_terraform iniciada', {
+    provider: state.provider,
+    dashboardKey: state.dashboardKey,
+    sloSuggestions: state.plan.sloSuggestions.length,
+    terraformWorkspaceDir: state.terraformWorkspaceDir
+  });
+
+  const sloTerraformJson = state.provider === 'datadog'
+    ? await buildDatadogSloTerraform(state.plan, state.dashboardKey)
+    : {};
+  const terraformJson = mergeTerraformJson(state.dashboardTerraformJson, sloTerraformJson);
 
   const terraformArtifactPath = await writeTerraformWorkspaceArtifact(
     state.terraformWorkspaceDir,
@@ -180,12 +206,16 @@ export async function compileTerraformNode(state: ObservabilityWorkflowState) {
     terraformJson
   );
 
-  logger.info('Etapa terraform concluída', {
+  logger.info('Etapa slo_terraform concluída', {
     provider: state.provider,
-    rootKeys: Object.keys(terraformJson),
+    hasSloResources: Object.keys(sloTerraformJson).length > 0,
     terraformArtifactPath
   });
-  return { terraformJson };
+
+  return {
+    sloTerraformJson,
+    terraformJson
+  };
 }
 
 export async function applyDatadogNode(state: ObservabilityWorkflowState) {
@@ -207,13 +237,16 @@ export async function applyDatadogNode(state: ObservabilityWorkflowState) {
   });
 
   const eventsFile = path.join(state.outputDir, 'custom-events.json');
+  const planFile = path.join(state.outputDir, 'plan.json');
   await ensureDir(state.outputDir);
   await writeFile(eventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
+  await writeJsonFile(planFile, state.plan);
 
   const applyReport = await applyDatadog({
     dashboardKey: state.dashboardKey,
     terraformDir: state.terraformWorkspaceDir,
     eventsFile,
+    planFile,
     outputDir: state.outputDir,
     dryRun: state.dryRun,
     burstConfig: state.eventBurstConfig

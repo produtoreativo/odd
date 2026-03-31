@@ -5,7 +5,7 @@ import { loadDotEnv } from '../../infrastructure/env/load-dot-env.js';
 import { ensureDir, writeJsonFile } from '../../shared/fs.js';
 import { normalizeDashboardSlug } from '../../shared/dashboard-identity.js';
 import { Logger } from '../../shared/logger.js';
-import { ingestEvents } from './datadog.js';
+import { ingestEvents, ingestSloMetrics } from './datadog.js';
 import { runTerraform } from './terraform.js';
 import { DatadogApplyReport, EventBurstConfig } from '../../shared/types.js';
 
@@ -24,6 +24,7 @@ async function main(): Promise<void> {
       ? `./generated/terraform-workspaces/datadog/${explicitDashboardKey}`
       : './terraform';
   const eventsFile = requireStringArg(args, 'events-file');
+  const planFile = typeof args['plan-file'] === 'string' ? args['plan-file'] : undefined;
   const dryRun = args['dry-run'] === true;
   const outputDir = typeof args.output === 'string'
     ? args.output
@@ -37,12 +38,13 @@ async function main(): Promise<void> {
     dashboardKey,
     terraformDir,
     eventsFile,
+    planFile,
     outputDir,
     dryRun,
     burstConfig
   });
 
-  if (report.terraformError || report.failedEventsCount > 0) {
+  if (report.terraformError || report.failedEventsCount > 0 || report.failedMetricsCount > 0) {
     process.exitCode = 1;
   }
 }
@@ -51,6 +53,7 @@ export async function applyDatadog(args: {
   dashboardKey: string;
   terraformDir: string;
   eventsFile: string;
+  planFile?: string;
   outputDir: string;
   dryRun: boolean;
   burstConfig?: Partial<EventBurstConfig>;
@@ -79,6 +82,22 @@ export async function applyDatadog(args: {
     failedEventsCount
   });
 
+  logger.info('Executando ingestão de métricas de SLO', {
+    planFile: args.planFile,
+    dryRun: args.dryRun
+  });
+  const metricIngestion = await ingestSloMetrics({
+    dashboardKey: args.dashboardKey,
+    planFile: args.planFile,
+    dryRun: args.dryRun,
+    burstConfig: args.burstConfig
+  });
+  const failedMetricsCount = metricIngestion.results.filter((metric) => metric.status === 'failed').length;
+  logger.info('Ingestão de métricas concluída', {
+    ingestedMetrics: metricIngestion.results.length,
+    failedMetricsCount
+  });
+
   const report: DatadogApplyReport = {
     provider: 'datadog',
     dashboardKey: args.dashboardKey,
@@ -90,7 +109,9 @@ export async function applyDatadog(args: {
     terraformCommands,
     terraformError,
     failedEventsCount,
-    ingestedEvents: ingestion.results
+    ingestedEvents: ingestion.results,
+    failedMetricsCount,
+    ingestedMetrics: metricIngestion.results
   };
 
   const reportPath = path.join(args.outputDir, 'apply-report.json');
@@ -100,6 +121,7 @@ export async function applyDatadog(args: {
     reportPath,
     terraformError,
     failedEventsCount,
+    failedMetricsCount,
     terraformCommandsCount: terraformCommands.length
   });
 
