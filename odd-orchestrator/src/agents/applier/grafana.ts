@@ -29,7 +29,7 @@ function toInfluxLine(event: CustomEventPayload): string {
     .map(([k, v]) => `${k}=${escapeInfluxValue(v)}`)
     .join(',');
 
-  const timestampNs = Date.now() * 1_000_000;
+  const timestampNs = (BigInt(Date.now()) * 1_000_000n).toString();
   return `odd_event_total,${tagString} value=1 ${timestampNs}`;
 }
 
