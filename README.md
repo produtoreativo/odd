@@ -7,7 +7,7 @@
 O ecossistema **odd** ainda está em construção.
 
 - **odd-orchestrator** — **Release Candidate (RC)**. É o componente mais maduro hoje e já cobre o fluxo de Event Storming para plano de dashboard, geração de Terraform e aplicação no Datadog.
-  Hoje também já possui suporte funcional para Dynatrace, embora o caminho Datadog ainda seja o mais maduro.
+  Hoje também já possui suporte funcional para Dynatrace e Grafana Cloud, embora o caminho Datadog ainda seja o mais maduro.
 - **Demais agentes e pipeline multi-agente** — **em construção**. As peças fora do orchestrator ainda estão evoluindo em arquitetura, contratos e integração end-to-end.
 
 Se você quer avaliar o projeto agora, o ponto de entrada recomendado é o diretório `odd-orchestrator/`.
@@ -72,13 +72,13 @@ O odd resolve isso com um pipeline automatizado que conecta essas etapas usando 
   ┌─────────────────┐
   │  🚀 Applier      │  Executa terraform apply
   │                  │  Ingere eventos sintéticos
-  │                  │  no Datadog ou Dynatrace
+  │                  │  no Datadog, Dynatrace ou Grafana
   └────────┬────────┘
            │
            ▼
   ┌─────────────────┐
   │  📊 Dashboard    │  Dashboard operacional em
-  │  Datadog/DT      │  Datadog ou Dynatrace
+  │  Datadog/DT/GF   │  Datadog, Dynatrace ou Grafana
   │                  │  com eventos e KPIs por fluxo
   └─────────────────┘
 ```
@@ -87,7 +87,7 @@ O odd resolve isso com um pipeline automatizado que conecta essas etapas usando 
 
 ### odd-orchestrator (TypeScript/Node.js) — Release Candidate
 
-Responsável por transformar planilhas de Event Storming em dashboards via Terraform para Datadog e Dynatrace.
+Responsável por transformar planilhas de Event Storming em dashboards via Terraform para Datadog, Dynatrace e Grafana Cloud.
 
 - **Planner** — Lê arquivos XLSX/CSV de Event Storming, categoriza eventos em "problemas" (erros, falhas, rejeições) e "normais" (sucessos, aprovações), e gera o plano do dashboard junto com o código Terraform
 - **Applier** — Executa `terraform plan/apply` para criar o dashboard no provider selecionado e ingere eventos customizados sintéticos para popular os painéis
@@ -121,7 +121,7 @@ Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augment
 | Embeddings | nomic-embed-text via Ollama |
 | Banco vetorial | Qdrant |
 | Orquestração | Apache Airflow + Celery |
-| Dashboards | Datadog + Terraform (IaC) |
+| Dashboards | Datadog, Dynatrace, Grafana Cloud + Terraform (IaC) |
 | Linguagens | TypeScript (orchestrator), Python (agentes) |
 | Infraestrutura | Docker Compose, PostgreSQL, Redis |
 
@@ -142,7 +142,7 @@ Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augment
 
 - **Gertrudes** — Geração completa de requisitos com RAG, múltiplas passadas, validação de domínio e contratos de qualidade
 - **Planner** — Leitura de Event Storming, categorização de eventos por sucesso/falha, geração de planos e Terraform
-- **Applier** — Execução de Terraform e ingestão de eventos no Datadog
+- **Applier** — Execução de Terraform e ingestão de eventos no Datadog, Dynatrace e Grafana Cloud
 - **Abstração de LLM** — Suporte a Ollama, OpenAI e Anthropic com seleção por prompt
 - **Infraestrutura** — Stack completa com Airflow, Qdrant e Ollama via Docker Compose
 
@@ -150,7 +150,7 @@ Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augment
 
 - **Corrinha** — Agente que converte requisitos em user stories, casos de uso e contratos de API
 - **Creuza** — Agente que gera Event Storming automaticamente a partir dos requisitos
-- **Pipeline end-to-end** — Integração completa desde a intenção do produto até o dashboard no Datadog, sem intervenção manual
+- **Pipeline end-to-end** — Integração completa desde a intenção do produto até o dashboard no Datadog/Dynatrace/Grafana, sem intervenção manual
 - **Base de conhecimento expandida** — Indexação de livros clássicos de engenharia de requisitos e software (Mastering the Requirements Process, Software Requirements, SWEBOK)
 
 ### A visão completa
@@ -169,7 +169,8 @@ O `odd-orchestrator` é hoje o ponto de entrada recomendado do repositório. Ele
 
 - geração de dashboard para `datadog`
 - geração de dashboard para `dynatrace`
-- ingestão de eventos sintéticos nos dois providers
+- geração de dashboard para `grafana` (Grafana Cloud)
+- ingestão de eventos sintéticos nos três providers
 - execução ponta a ponta via `pipeline.sh`
 
 #### Instalação
@@ -201,12 +202,20 @@ DYNATRACE_ENV_URL=https://SEU-AMBIENTE.live.dynatrace.com
 DYNATRACE_API_TOKEN=xxxxxx
 DYNATRACE_PLATFORM_TOKEN=xxxxxx
 DYNATRACE_EVENT_TIMEOUT_MINUTES=15
+
+GRAFANA_URL=https://your-stack.grafana.net
+GRAFANA_AUTH=glsa_xxxxxxxxxxxxxxxxxxxx
+GRAFANA_METRICS_URL=https://prometheus-prod-XX-prod-REGION-0.grafana.net
+GRAFANA_METRICS_USER=000000
+GRAFANA_METRICS_TOKEN=glc_xxxxxxxxxxxxxxxxxxxx
 ```
 
 Observações:
 
 - `DYNATRACE_API_TOKEN` é usado para ingestão em `/api/v2/events/ingest`
 - `DYNATRACE_PLATFORM_TOKEN` é usado pelo provider Terraform ao criar dashboards novos via `dynatrace_document`
+- `GRAFANA_AUTH` (service account token `glsa_...`) é usado pelo provider Terraform para criação de dashboards
+- `GRAFANA_METRICS_TOKEN` (Cloud Access Policy token `glc_...`) é usado para push de métricas Prometheus via InfluxDB line protocol
 - `OLLAMA_BASE_URL` deve preferencialmente usar `127.0.0.1`, não `localhost`
 
 #### Pipeline ponta a ponta
@@ -214,7 +223,7 @@ Observações:
 Uso:
 
 ```bash
-./pipeline.sh [datadog|dynatrace] [planilha.xlsx|planilha.csv] [dashboard-title]
+./pipeline.sh [datadog|dynatrace|grafana] [planilha.xlsx|planilha.csv] [dashboard-title]
 ```
 
 Exemplos:
@@ -224,6 +233,7 @@ Exemplos:
 ./pipeline.sh datadog
 ./pipeline.sh datadog ./samples/event-storming.xlsx "Meu Dashboard"
 ./pipeline.sh dynatrace ./samples/value_stream_confirmacao_pagamento_completa.xlsx "PagamentoCompleto"
+./pipeline.sh grafana ./samples/event-storming.xlsx "Meu Dashboard Grafana"
 ```
 
 Comportamento atual do script:
@@ -272,6 +282,24 @@ npm run applier -- \
   --provider dynatrace
 ```
 
+Planner Grafana:
+
+```bash
+npm run planner -- \
+  --input ./samples/event-storming.xlsx \
+  --dashboard-title "Meu Dashboard" \
+  --provider grafana
+```
+
+Applier Grafana:
+
+```bash
+npm run applier -- \
+  --terraform-dir ./terraform-grafana \
+  --events-file ./generated/<run>/custom-events.json \
+  --provider grafana
+```
+
 Dry run:
 
 ```bash
@@ -286,6 +314,7 @@ npm run applier -- \
 
 - `datadog`: caminho mais maduro hoje
 - `dynatrace`: já cria dashboard nova, aplica Terraform e ingere eventos, mas ainda está evoluindo na paridade visual com o Datadog
+- `grafana`: cria dashboard no Grafana Cloud via Terraform e ingere métricas via Prometheus (InfluxDB line protocol). Compatível com o free tier do Grafana Cloud
 
 ### Stack Docker (Gertrudes + infra)
 
@@ -323,6 +352,7 @@ Veja exemplos em `odd-orchestrator/samples/`.
 - `generated/<inputName>_<timestamp>/custom-events.json` — Eventos sintéticos para Datadog ou Dynatrace
 - `terraform/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Datadog
 - `terraform-dynatrace/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Dynatrace
+- `terraform-grafana/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Grafana Cloud
 
 ### Pelo Applier
 - `generated/apply-report.json` — Relatório de sucesso/falha da aplicação
@@ -342,5 +372,8 @@ Veja exemplos em `odd-orchestrator/samples/`.
 | `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE` | Applier | Autenticação no Datadog |
 | `DYNATRACE_ENV_URL`, `DYNATRACE_API_TOKEN` | Applier | Ingestão de eventos no Dynatrace |
 | `DYNATRACE_PLATFORM_TOKEN` | Terraform Dynatrace | Criação de dashboards novas via `dynatrace_document` |
+| `GRAFANA_URL`, `GRAFANA_AUTH` | Terraform Grafana | URL do stack e service account token (`glsa_...`) para criação de dashboards |
+| `GRAFANA_METRICS_URL`, `GRAFANA_METRICS_USER` | Applier | Endpoint e usuário para push de métricas Prometheus |
+| `GRAFANA_METRICS_TOKEN` | Applier | Cloud Access Policy token (`glc_...`) para push de métricas |
 | `OLLAMA_ENABLED`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Planner | LLM local para categorização e suporte ao planner |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | Airflow | Configuração de chunking para indexação RAG |
