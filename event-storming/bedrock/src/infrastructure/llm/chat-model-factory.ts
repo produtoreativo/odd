@@ -10,6 +10,16 @@ import { Logger } from '../../shared/logger.js';
 const logger = new Logger('chat-model-factory');
 
 export type SupportedProvider = 'bedrock';
+export type ModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+export type ChatModelResponse = {
+  content: string;
+  usage: ModelUsage;
+};
 
 export function buildChatModel(provider: SupportedProvider, model: string) {
   logger.info('Construindo cliente de modelo', { provider, model });
@@ -19,7 +29,7 @@ export function buildChatModel(provider: SupportedProvider, model: string) {
 class BedrockChatModel {
   constructor(private readonly model: string) {}
 
-  async invoke(messages: Array<SystemMessage | HumanMessage>) {
+  async invoke(messages: Array<SystemMessage | HumanMessage>): Promise<ChatModelResponse> {
     const { systemPrompts, bedrockMessages } = toBedrockConversation(messages);
     const client = createBedrockClient();
 
@@ -33,7 +43,12 @@ class BedrockChatModel {
     }));
 
     return {
-      content: readBedrockTextResponse(response.output?.message?.content)
+      content: readBedrockTextResponse(response.output?.message?.content),
+      usage: {
+        inputTokens: response.usage?.inputTokens ?? 0,
+        outputTokens: response.usage?.outputTokens ?? 0,
+        totalTokens: response.usage?.totalTokens ?? 0
+      }
     };
   }
 }

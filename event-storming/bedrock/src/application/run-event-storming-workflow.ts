@@ -7,10 +7,12 @@ import { writeWorkbook } from '../infrastructure/filesystem/workbook-writer.js';
 import { traceStep } from '../infrastructure/langsmith/tracing.js';
 import { resolveAgentModels } from '../infrastructure/llm/agent-model-resolver.js';
 import { CandidateContextSchema, ImageObservationSchema } from '../domain/event-storming-schema.js';
+import { WorkflowStepMetrics, WorkflowStepName } from './workflow/state.js';
 
 const logger = new Logger('run-event-storming-workflow');
 
 export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
+  const workflowStartedAt = Date.now();
   const agentModels = resolveAgentModels(args);
   const preloadedState = await loadPreloadedState(args);
 
@@ -71,6 +73,8 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   );
 
   const result = await invokeWorkflow();
+  const workflowSummary = buildWorkflowSummary(result.stepMetrics, workflowStartedAt);
+  logger.info('Resumo final do workflow', workflowSummary);
 
   const requiredStates = {
     imageObservation: args.startFrom === 'observe' ? Boolean(result.imageObservation) : true,
@@ -148,4 +152,52 @@ async function loadPreloadedState(args: CliArgs): Promise<{
   );
 
   return { imageObservation: null, candidateContext };
+}
+
+function buildWorkflowSummary(
+  stepMetrics: Partial<Record<WorkflowStepName, WorkflowStepMetrics>> | undefined,
+  workflowStartedAt: number
+) {
+  const totalDurationMs = Date.now() - workflowStartedAt;
+  const orderedSteps: WorkflowStepName[] = [
+    'observe_image',
+    'validate_image_observation',
+    'extract_events',
+    'validate_candidate_events',
+    'normalize_context',
+    'validate_normalization',
+    'create_workbook',
+    'validate_workbook',
+    'fail'
+  ];
+
+  const steps = orderedSteps
+    .map((stepName) => {
+      const metrics = stepMetrics?.[stepName];
+      if (!metrics) {
+        return null;
+      }
+
+      return {
+        step: stepName,
+        executions: metrics.executions,
+        durationMs: metrics.durationMs,
+        durationSeconds: Number((metrics.durationMs / 1000).toFixed(3)),
+        inputTokens: metrics.inputTokens,
+        outputTokens: metrics.outputTokens,
+        totalTokens: metrics.totalTokens
+      };
+    })
+    .filter((step): step is NonNullable<typeof step> => step !== null);
+
+  const totalTokens = steps.reduce((sum, step) => sum + step.totalTokens, 0);
+
+  return {
+    totalDurationMs,
+    totalDurationSeconds: Number((totalDurationMs / 1000).toFixed(3)),
+    totalTokens,
+    totalInputTokens: steps.reduce((sum, step) => sum + step.inputTokens, 0),
+    totalOutputTokens: steps.reduce((sum, step) => sum + step.outputTokens, 0),
+    steps
+  };
 }

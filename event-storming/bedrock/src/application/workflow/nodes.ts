@@ -12,7 +12,7 @@ import {
 import { Logger } from '../../shared/logger.js';
 import { formatError } from '../../shared/errors.js';
 import { renderPrompt } from '../../infrastructure/filesystem/prompt-repository.js';
-import { buildChatModel } from '../../infrastructure/llm/chat-model-factory.js';
+import { buildChatModel, ModelUsage } from '../../infrastructure/llm/chat-model-factory.js';
 import { imageContentFromFile } from '../../infrastructure/llm/image-message.js';
 import { extractRawResponseText, parseJsonResponse } from '../../infrastructure/llm/json-response-parser.js';
 import {
@@ -29,13 +29,14 @@ import {
   validateRecognizedContext,
   validateWorkbook
 } from '../../domain/context-validator.js';
-import { WorkflowGraphState } from './state.js';
+import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
 
 const logger = new Logger('workflow-nodes');
 
 export async function observeImageNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const attempt = state.observeAttempts + 1;
   const feedback = state.observeAttempts > 0 ? state.observeFeedback : 'Nenhum.';
   logger.info('Iniciando nó observe_image', {
@@ -69,13 +70,15 @@ export async function observeImageNode(state: WorkflowGraphState) {
       logger.info('Nó observe_image concluído com sucesso', {
         attempt,
         touchPointCount: observation.touchPointsDetected.length,
-        outsideTextCount: observation.textsOutsideShapes.length
+        outsideTextCount: observation.textsOutsideShapes.length,
+        usage: response.usage
       });
 
       return {
         observeAttempts: attempt,
         imageObservation: observation,
-        observeFeedback: 'Nenhum.'
+        observeFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('observe_image', startedAt, response.usage)
       };
     },
     {
@@ -101,12 +104,14 @@ export async function observeImageNode(state: WorkflowGraphState) {
       observeAttempts: attempt,
       imageObservation: null,
       observeFeedback: message,
+      stepMetrics: buildStepMetricUpdate('observe_image', startedAt),
       failures: [`observe: ${message}`]
     };
   }
 }
 
 export async function validateImageObservationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_image_observation', {
     observeAttempts: state.observeAttempts
   });
@@ -116,7 +121,10 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       const issues = validateImageObservation(state.imageObservation);
       if (issues.length === 0) {
         logger.info('Validação da observação concluída sem erros');
-        return { observeFeedback: 'Nenhum.' };
+        return {
+          observeFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt)
+        };
       }
 
       logger.warn('Validação da observação encontrou inconsistências', {
@@ -126,6 +134,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
 
       return {
         observeFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt),
         failures: issues.map((issue) => `observe: ${issue}`)
       };
     },
@@ -143,6 +152,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
 }
 
 export async function extractEventsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const imageObservation = state.imageObservation;
   if (!imageObservation) {
     throw new Error('Estado inválido: imageObservation ausente.');
@@ -186,13 +196,15 @@ export async function extractEventsNode(state: WorkflowGraphState) {
       logger.info('Nó extract_events concluído com sucesso', {
         attempt,
         candidateEventCount: candidateContext.candidateEvents.length,
-        candidateFlowCount: candidateContext.candidateFlows.length
+        candidateFlowCount: candidateContext.candidateFlows.length,
+        usage: response.usage
       });
 
       return {
         extractAttempts: attempt,
         candidateContext,
-        extractFeedback: 'Nenhum.'
+        extractFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('extract_events', startedAt, response.usage)
       };
     },
     {
@@ -221,12 +233,14 @@ export async function extractEventsNode(state: WorkflowGraphState) {
     return {
       extractAttempts: attempt,
       candidateContext: deterministicCandidateContext,
-      extractFeedback: `fallback determinístico aplicado após falha do extractor: ${message}`
+      extractFeedback: `fallback determinístico aplicado após falha do extractor: ${message}`,
+      stepMetrics: buildStepMetricUpdate('extract_events', startedAt)
     };
   }
 }
 
 export async function validateCandidateEventsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_candidate_events', {
     extractAttempts: state.extractAttempts
   });
@@ -236,7 +250,10 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
       const issues = validateCandidateContext(state.candidateContext);
       if (issues.length === 0) {
         logger.info('Validação dos candidatos concluída sem erros');
-        return { extractFeedback: 'Nenhum.' };
+        return {
+          extractFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_candidate_events', startedAt)
+        };
       }
 
       logger.warn('Validação dos candidatos encontrou inconsistências', {
@@ -246,6 +263,7 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
 
       return {
         extractFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_candidate_events', startedAt),
         failures: issues.map((issue) => `extract: ${issue}`)
       };
     },
@@ -267,6 +285,7 @@ export async function validateExtractionNode(state: WorkflowGraphState) {
 }
 
 export async function normalizeContextNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const candidateContext = state.candidateContext;
   if (!candidateContext) {
     throw new Error('Estado inválido: candidateContext ausente.');
@@ -305,13 +324,15 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
       logger.info('Nó normalize_context concluído com sucesso', {
         attempt,
         flowCount: standardizedContext.recognizedFlows.length,
-        rowCount: standardizedContext.rows.length
+        rowCount: standardizedContext.rows.length,
+        usage: response.usage
       });
 
       return {
         normalizeAttempts: attempt,
         standardizedContext,
-        normalizeFeedback: 'Nenhum.'
+        normalizeFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('normalize_context', startedAt, response.usage)
       };
     },
     {
@@ -342,12 +363,14 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
     return {
       normalizeAttempts: attempt,
       standardizedContext,
-      normalizeFeedback: `fallback determinístico aplicado após falha do reviewer: ${message}`
+      normalizeFeedback: `fallback determinístico aplicado após falha do reviewer: ${message}`,
+      stepMetrics: buildStepMetricUpdate('normalize_context', startedAt)
     };
   }
 }
 
 export async function validateNormalizationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_normalization', {
     normalizeAttempts: state.normalizeAttempts
   });
@@ -357,7 +380,10 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
       const issues = validateRecognizedContext(state.standardizedContext, 'normalize');
       if (issues.length === 0) {
         logger.info('Validação da normalização concluída sem erros');
-        return { normalizeFeedback: 'Nenhum.' };
+        return {
+          normalizeFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_normalization', startedAt)
+        };
       }
 
       logger.warn('Validação da normalização encontrou inconsistências', {
@@ -367,6 +393,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
 
       return {
         normalizeFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_normalization', startedAt),
         failures: issues.map((issue) => `normalize: ${issue}`)
       };
     },
@@ -384,6 +411,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
 }
 
 export async function createWorkbookNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const standardizedContext = state.standardizedContext;
   if (!standardizedContext) {
     throw new Error('Estado inválido: standardizedContext ausente.');
@@ -415,7 +443,8 @@ export async function createWorkbookNode(state: WorkflowGraphState) {
       return {
         workbookAttempts: attempt,
         workbook,
-        workbookFeedback: 'Nenhum.'
+        workbookFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('create_workbook', startedAt)
       };
     },
     {
@@ -439,12 +468,14 @@ export async function createWorkbookNode(state: WorkflowGraphState) {
       workbookAttempts: attempt,
       workbook: null,
       workbookFeedback: message,
+      stepMetrics: buildStepMetricUpdate('create_workbook', startedAt),
       failures: [`workbook: ${message}`]
     };
   }
 }
 
 export async function validateWorkbookNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_workbook', {
     workbookAttempts: state.workbookAttempts
   });
@@ -454,7 +485,10 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
       const issues = validateWorkbook(state.workbook);
       if (issues.length === 0) {
         logger.info('Validação do workbook concluída sem erros');
-        return { workbookFeedback: 'Nenhum.' };
+        return {
+          workbookFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_workbook', startedAt)
+        };
       }
 
       logger.warn('Validação do workbook encontrou inconsistências', {
@@ -464,6 +498,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
 
       return {
         workbookFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_workbook', startedAt),
         failures: issues.map((issue) => `workbook: ${issue}`)
       };
     },
@@ -481,6 +516,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
 }
 
 export async function failNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const lastFailure = state.failures.at(-1) ?? 'Workflow falhou sem detalhes.';
   logger.error('Encerrando workflow em fail', {
     failures: state.failures,
@@ -489,7 +525,9 @@ export async function failNode(state: WorkflowGraphState) {
 
   const execute = traceStep(
     async () => {
-      throw new Error(lastFailure);
+      return {
+        stepMetrics: buildStepMetricUpdate('fail', startedAt)
+      };
     },
     {
       name: 'fail_node',
@@ -600,4 +638,20 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
       detail: assumption
     }))
   ];
+}
+
+function buildStepMetricUpdate(
+  stepName: WorkflowStepName,
+  startedAt: number,
+  usage?: ModelUsage
+): Partial<Record<WorkflowStepName, WorkflowStepMetrics>> {
+  return {
+    [stepName]: {
+      executions: 1,
+      durationMs: Date.now() - startedAt,
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      totalTokens: usage?.totalTokens ?? 0
+    }
+  };
 }
