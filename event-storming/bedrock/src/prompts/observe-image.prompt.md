@@ -18,7 +18,6 @@ Regras:
 - uma caixa só participa do fluxo se houver pelo menos um evento visível fora da caixa claramente associado a ela por proximidade, sequência visual, seta ou continuidade do board
 - se uma caixa não tiver nenhum evento próximo, nenhum evento de saída, nenhum evento de entrada e não fizer parte clara de um fluxo observado, não a inclua em `touchPointsDetected`
 - caixas isoladas ou que parecem apenas estados cadastrais sem eventos associados devem ser descartadas de `touchPointsDetected`
-- exemplos do que deve ser descartado quando estiverem sem eventos próximos: `Cobrança Cadastrada`, `Cliente Cadastrado`
 - só use `touchPointsDetected` para títulos dentro de caixa que tenham relevância operacional no fluxo de eventos
 - use `textsOutsideShapes` para textos fora de caixa
 - todo evento em `textsOutsideShapes` deve receber uma classificação em `eventVisualSemantics`
@@ -38,6 +37,10 @@ Regras:
 - não gere correlação para caixa que não tenha evento visível associado
 - se uma caixa existir na imagem mas não tiver evento próximo, trate-a como estrutural ou irrelevante para este recorte e não a devolva como ponto de contato
 - se um texto estiver fora da caixa mas parecer apenas rótulo de caminho, legenda ou título estrutural, não trate como evento; coloque em `uncertainItems` se necessário
+- `supporting` deve aparecer antes de `protagonist`
+- cada ponto de contato finaliza com um único `protagonist`
+- eventos próximos da ponta da seta pertencem ao ponto de contato na saída da direção da seta
+- `flowsDetected.orderedEventTitles` deve respeitar a leitura `supporting -> protagonist`
 - `assumptions` deve conter apenas observações sobre ambiguidade visual, legibilidade, ou itens estruturais descartados
 - se não houver ambiguidade relevante, responda `assumptions: []`
 
