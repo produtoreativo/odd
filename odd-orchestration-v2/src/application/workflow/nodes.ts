@@ -11,6 +11,7 @@ import { writeTerraformWorkspaceArtifact } from '../../infrastructure/terraform/
 import { ensureDir, writeJsonFile } from '../../shared/fs.js';
 import { readPlanningInput } from '../../shared/input.js';
 import { Logger } from '../../shared/logger.js';
+import { buildEnvTag, buildEventQueryHint } from '../../shared/query-hint.js';
 import { mergeTerraformJson } from '../../shared/terraform-json.js';
 import { DashboardPlan, EventStormingRow, SloSuggestion } from '../../shared/types.js';
 import { ObservabilityWorkflowState } from './state.js';
@@ -23,7 +24,7 @@ export async function loadInputNode(state: ObservabilityWorkflowState) {
     input: state.input,
     outputDir: state.outputDir
   });
-  const rows = await readPlanningInput(state.input);
+  const rows = await readPlanningInput(state.input, state.env);
   logger.info('Etapa input concluída', {
     input: state.input,
     rowCount: rows.length
@@ -87,8 +88,13 @@ export async function suggestSlosNode(state: ObservabilityWorkflowState) {
     }, null, 2);
     const rawText = await model.callRawText(prompt, userPrompt);
     const rawOutputPath = await persistRawOutput(state.outputDir, '02-slo-suggestions.raw.txt', rawText);
-    const parsed = asArray(parseBedrockJsonResponse(rawText)).map((item) => SloSuggestionSchema.parse(item)).slice(0, 5);
-    const sloSuggestions = parsed.length >= 3 ? parsed : fallbackSlos(state.categorized.problems, state.categorized.normal);
+    const parsed = asArray(parseBedrockJsonResponse(rawText))
+      .map((item) => SloSuggestionSchema.parse(item))
+      .slice(0, 5);
+    const normalizedParsed = normalizeSloSuggestions(parsed, state.env);
+    const sloSuggestions = normalizedParsed.length >= 3
+      ? normalizedParsed
+      : fallbackSlos(state.categorized.problems, state.categorized.normal, state.env);
     logger.info('Etapa slos concluída', {
       generated: parsed.length,
       returned: sloSuggestions.length,
@@ -100,7 +106,7 @@ export async function suggestSlosNode(state: ObservabilityWorkflowState) {
       error: error instanceof Error ? error.message : String(error),
       categorizedEvents: state.categorized.problems.length + state.categorized.normal.length
     });
-    const sloSuggestions = fallbackSlos(state.categorized.problems, state.categorized.normal);
+    const sloSuggestions = fallbackSlos(state.categorized.problems, state.categorized.normal, state.env);
     logger.info('Fallback de slos concluído', {
       returned: sloSuggestions.length
     });
@@ -133,7 +139,11 @@ export async function buildPlanNode(state: ObservabilityWorkflowState) {
     }, null, 2);
     const rawText = await model.callRawText(prompt, userPrompt);
     const rawOutputPath = await persistRawOutput(state.outputDir, '03-dashboard-plan.raw.txt', rawText);
-    const plan = DashboardPlanSchema.parse(parseBedrockJsonResponse(rawText));
+    const plan = normalizeDashboardPlan(
+      DashboardPlanSchema.parse(parseBedrockJsonResponse(rawText)),
+      state.rows,
+      state.env
+    );
     validatePlanCoverage(plan, state.rows);
     logger.info('Etapa plan concluída', {
       bands: plan.bands.length,
@@ -147,7 +157,7 @@ export async function buildPlanNode(state: ObservabilityWorkflowState) {
       error: error instanceof Error ? error.message : String(error),
       provider: state.provider
     });
-    const plan = fallbackPlan(state.dashboardTitle, state.categorized.problems, state.categorized.normal, state.sloSuggestions);
+    const plan = fallbackPlan(state.dashboardTitle, state.categorized.problems, state.categorized.normal, state.sloSuggestions, state.env);
     logger.info('Fallback de plan concluído', {
       bands: plan.bands.length,
       customEvents: plan.customEvents.length,
@@ -195,7 +205,7 @@ export async function compileSloTerraformNode(state: ObservabilityWorkflowState)
   });
 
   const sloTerraformJson = state.provider === 'datadog'
-    ? await buildDatadogSloTerraform(state.plan, state.dashboardKey)
+    ? await buildDatadogSloTerraform(state.plan, state.dashboardKey, state.env)
     : {};
   const terraformJson = mergeTerraformJson(state.dashboardTerraformJson, sloTerraformJson);
 
@@ -320,13 +330,13 @@ function fallbackCategorization(rows: EventStormingRow[]) {
   };
 }
 
-function fallbackSlos(problems: EventStormingRow[], normal: EventStormingRow[]): SloSuggestion[] {
+function fallbackSlos(problems: EventStormingRow[], normal: EventStormingRow[], env?: string): SloSuggestion[] {
   const candidates = [
-    buildSlo('availability', 'Disponibilidade do fluxo principal', [...problems, ...normal].slice(0, 3), '99.9%'),
-    buildSlo('error_rate', 'Taxa de erro dos eventos problemáticos', problems.slice(0, 3), '< 1%'),
-    buildSlo('throughput', 'Volume do fluxo saudável', normal.slice(0, 3), '>= baseline operacional'),
-    buildSlo('latency', 'Latência de confirmação nas etapas finais', [...problems, ...normal].slice(-3), 'p95 < 5m'),
-    buildSlo('availability', 'Cobertura operacional por touch point', [...normal, ...problems].slice(0, 3), '99.5%')
+    buildSlo('availability', 'Disponibilidade do fluxo principal', [...problems, ...normal].slice(0, 3), '99.9%', env),
+    buildSlo('error_rate', 'Taxa de erro dos eventos problemáticos', problems.slice(0, 3), '< 1%', env),
+    buildSlo('throughput', 'Volume do fluxo saudável', normal.slice(0, 3), '>= baseline operacional', env),
+    buildSlo('latency', 'Latência de confirmação nas etapas finais', [...problems, ...normal].slice(-3), 'p95 < 5m', env),
+    buildSlo('availability', 'Cobertura operacional por touch point', [...normal, ...problems].slice(0, 3), '99.5%', env)
   ];
 
   return candidates.filter((item) => item.sourceEventKeys.length > 0).slice(0, 5);
@@ -336,9 +346,10 @@ function buildSlo(
   sliType: SloSuggestion['sliType'],
   name: string,
   rows: EventStormingRow[],
-  target: string
+  target: string,
+  env?: string
 ): SloSuggestion {
-  const queryHint = rows[0]?.queryHint || 'tags:(source:odd)';
+  const queryHint = rows[0]?.queryHint || buildEventQueryHint('__odd_empty__', env);
   return {
     id: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
     name,
@@ -355,7 +366,8 @@ function fallbackPlan(
   dashboardTitle: string,
   problems: EventStormingRow[],
   normal: EventStormingRow[],
-  sloSuggestions: SloSuggestion[]
+  sloSuggestions: SloSuggestion[],
+  env?: string
 ): DashboardPlan {
   const heroProblem = problems[0];
   const heroNormal = normal[0];
@@ -371,7 +383,7 @@ function fallbackPlan(
           id: 'hero_alert_primary',
           title: heroProblem ? `${heroProblem.eventTitle} nos últimos 5m` : 'Sem falhas críticas no período',
           widgetType: 'query_value',
-          query: heroProblem?.queryHint || heroNormal?.queryHint || 'tags:(source:odd)',
+          query: heroProblem?.queryHint || heroNormal?.queryHint || buildEventQueryHint('__odd_empty__', env),
           stage: heroProblem?.stage || heroNormal?.stage || 'overview',
           sectionType: heroProblem ? 'problems' : 'normal',
           sourceEventKeys: [heroProblem?.eventKey || heroNormal?.eventKey || 'overview'],
@@ -391,6 +403,7 @@ function fallbackPlan(
       text: `Synthetic event emitted from row ${row.ordem}`,
       tags: [
         `event_key:${row.eventKey}`,
+        buildEnvTag(env),
         `stage:${row.stage}`,
         `actor:${row.actor}`,
         `service:${row.service}`,
@@ -428,6 +441,50 @@ function buildBand(
   }));
 
   return { id, title, sectionType, widgets };
+}
+
+function normalizeSloSuggestions(suggestions: SloSuggestion[], env?: string): SloSuggestion[] {
+  return suggestions.map((suggestion) => ({
+    ...suggestion,
+    queryHint: buildEventQueryHint(suggestion.sourceEventKeys[0] || '__odd_empty__', env)
+  }));
+}
+
+function normalizeDashboardPlan(plan: DashboardPlan, rows: EventStormingRow[], env?: string): DashboardPlan {
+  const rowByEventKey = new Map(rows.map((row) => [row.eventKey, row]));
+
+  return {
+    ...plan,
+    bands: plan.bands.map((band) => ({
+      ...band,
+      widgets: band.widgets.map((widget) => {
+        const sourceRow = widget.sourceEventKeys
+          .map((eventKey) => rowByEventKey.get(eventKey))
+          .find((row): row is EventStormingRow => Boolean(row));
+
+        return {
+          ...widget,
+          query: sourceRow?.queryHint || buildEventQueryHint(widget.sourceEventKeys[0] || '__odd_empty__', env)
+        };
+      })
+    })),
+    customEvents: plan.customEvents.map((event) => ({
+      ...event,
+      tags: ensurePlanEventTags(event.tags, event.title, event.aggregation_key, env)
+    })),
+    sloSuggestions: normalizeSloSuggestions(plan.sloSuggestions, env)
+  };
+}
+
+function ensurePlanEventTags(tags: string[], eventKey: string, aggregationKey: string | undefined, env?: string): string[] {
+  const merged = new Set<string>([
+    `event_key:${eventKey}`,
+    buildEnvTag(env),
+    ...(aggregationKey ? [`stage:${aggregationKey}`] : []),
+    ...tags
+  ]);
+
+  return [...merged];
 }
 
 function validatePlanCoverage(plan: DashboardPlan, rows: EventStormingRow[]) {

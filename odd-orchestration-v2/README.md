@@ -63,6 +63,7 @@ npm run workflow -- \
   --input ./samples/event-storming-tuangou-project-format.xlsx \
   --dashboard-title "ODD - Tuangou" \
   --dashboard-key "tuangou-acompanhamento" \
+  --env dev \
   --provider datadog
 ```
 
@@ -73,6 +74,7 @@ npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
   --dashboard-title "ODD - Payments - v4" \
   --dashboard-key "payments-acompanhamento-v4" \
+  --env dev \
   --provider datadog \
   --burst-count 6 \
   --burst-interval-ms 10000 \
@@ -116,6 +118,7 @@ Você pode controlar a execução com:
 
 - `--start-from <input|categorize|slos|plan|terraform|apply>`
 - `--end-at <input|categorize|slos|plan|terraform|apply>`
+- `--env <dev|...>`: ambiente usado nos `queryHint`; opcional, padrão `dev`
 
 ### Parar após uma etapa
 

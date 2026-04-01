@@ -1,4 +1,5 @@
 import { DashboardPlan, SloSuggestion } from '../../shared/types.js';
+import { buildEnvTag, normalizeEnv } from '../../shared/query-hint.js';
 
 const GOOD_METRIC = 'odd.workflow.slo.good';
 const TOTAL_METRIC = 'odd.workflow.slo.total';
@@ -49,35 +50,40 @@ function resolveDatadogSloWarning(target: number): number {
   return Math.min(99.99, Number((target + 1).toFixed(2)));
 }
 
-function buildTags(dashboardKey: string, slo: SloSuggestion): string[] {
+function buildTags(dashboardKey: string, slo: SloSuggestion, env?: string): string[] {
   return [
     'source:odd',
+    buildEnvTag(env),
     `dashboard_key:${dashboardKey}`,
     `slo_id:${slo.id}`,
     `sli_type:${slo.sliType}`
   ];
 }
 
-function metricQuery(metricName: string, dashboardKey: string, slo: SloSuggestion): string {
-  return `sum:${metricName}{dashboard_key:${dashboardKey},slo_id:${slo.id},source:odd}.as_count()`;
+function metricQuery(metricName: string, dashboardKey: string, slo: SloSuggestion, env?: string): string {
+  return `sum:${metricName}{dashboard_key:${dashboardKey},slo_id:${slo.id},source:odd,env:${normalizeEnv(env)}}.as_count()`;
 }
 
-export async function buildDatadogSloTerraform(plan: DashboardPlan, dashboardKey: string): Promise<Record<string, unknown>> {
+export async function buildDatadogSloTerraform(
+  plan: DashboardPlan,
+  dashboardKey: string,
+  env?: string
+): Promise<Record<string, unknown>> {
   const slos: Record<string, unknown> = {};
 
   for (const slo of plan.sloSuggestions) {
     const sloName = `${resourceName(`${dashboardKey}_${slo.id}`)}_slo`;
     const target = resolveDatadogSloTarget(slo);
     const warning = resolveDatadogSloWarning(target);
-    const tags = buildTags(dashboardKey, slo);
+    const tags = buildTags(dashboardKey, slo, env);
 
     slos[sloName] = {
       name: `${plan.dashboardTitle} | ${slo.name}`,
       type: 'metric',
       description: `${slo.objective}\n\n${slo.rationale}`,
       query: {
-        numerator: metricQuery(GOOD_METRIC, dashboardKey, slo),
-        denominator: metricQuery(TOTAL_METRIC, dashboardKey, slo)
+        numerator: metricQuery(GOOD_METRIC, dashboardKey, slo, env),
+        denominator: metricQuery(TOTAL_METRIC, dashboardKey, slo, env)
       },
       tags,
       thresholds: [

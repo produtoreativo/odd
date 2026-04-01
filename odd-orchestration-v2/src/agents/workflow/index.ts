@@ -7,6 +7,7 @@ import { loadDotEnv } from '../../infrastructure/env/load-dot-env.js';
 import { buildObservabilityWorkflow } from '../../application/workflow/build-observability-workflow.js';
 import { prepareTerraformWorkspace } from '../../infrastructure/terraform/workspace.js';
 import { buildDashboardKey } from '../../shared/dashboard-identity.js';
+import { buildEventQueryHint, normalizeEnv } from '../../shared/query-hint.js';
 import { readPlanningInput } from '../../shared/input.js';
 import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, SloSuggestion } from '../../shared/types.js';
 
@@ -26,10 +27,11 @@ async function main() {
   const startFrom = parseStepArg(args['start-from'], 'input');
   const endAt = parseStepArg(args['end-at'], provider === 'datadog' ? 'apply' : 'terraform');
   const dryRun = args['dry-run'] === true;
+  const env = normalizeEnv(typeof args.env === 'string' ? args.env : undefined);
   const eventBurstConfig = resolveBurstArgs(args);
   const baseOutput = typeof args.output === 'string' ? args.output : './generated';
   const input = typeof args.input === 'string' ? args.input : undefined;
-  const preloadedState = await loadPreloadedState(args, startFrom, input);
+  const preloadedState = await loadPreloadedState(args, startFrom, input, env);
   const dashboardTitle = typeof args['dashboard-title'] === 'string'
     ? args['dashboard-title']
     : preloadedState.plan?.dashboardTitle
@@ -56,6 +58,7 @@ async function main() {
     dashboardTitle,
     dashboardKey,
     provider,
+    env,
     outputDir,
     terraformWorkspaceDir,
     startFrom,
@@ -76,6 +79,7 @@ async function main() {
     input: input ? path.resolve(process.cwd(), input) : '',
     dashboardTitle,
     provider,
+    env,
     outputDir,
     terraformWorkspaceDir,
     dryRun,
@@ -101,6 +105,7 @@ async function main() {
     startFrom,
     endAt,
     dryRun,
+    env,
     hasApplyReport: Boolean(result.applyReport)
   });
 }
@@ -150,7 +155,8 @@ function parseStepArg(
 async function loadPreloadedState(
   args: Record<string, string | boolean>,
   startFrom: 'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply',
-  input?: string
+  input?: string,
+  env?: string
 ): Promise<{
   rows: EventStormingRow[];
   categorized: CategorizedEvents | null;
@@ -184,7 +190,7 @@ async function loadPreloadedState(
     }
 
     return {
-      rows: await readPlanningInput(path.resolve(process.cwd(), input)),
+      rows: await readPlanningInput(path.resolve(process.cwd(), input), env),
       categorized: null,
       sloSuggestions: [],
       plan: null
@@ -228,7 +234,7 @@ async function loadPreloadedState(
     service: 'event.storming',
     tags: event.tags,
     dashboardWidget: 'event_stream' as const,
-    queryHint: `tags:(event_key:${event.title} source:odd)`
+    queryHint: buildEventQueryHint(event.title, env)
   }));
 
   return {

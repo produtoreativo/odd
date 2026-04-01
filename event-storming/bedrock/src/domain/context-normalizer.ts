@@ -12,11 +12,11 @@ const logger = new Logger('context-normalizer');
 
 type NormalizationOptions = {
   inputImage?: string;
+  env?: string;
 };
 
 type ProjectMetadata = {
   businessDomain: string;
-  sourceSheet: string;
 };
 
 type EventMetadata = {
@@ -26,7 +26,6 @@ type EventMetadata = {
   stage: string;
   service: string;
   actor: string;
-  metricType: 'count' | 'gauge';
   tags: string;
   eventKeyBase: string;
 };
@@ -68,18 +67,18 @@ export function candidateContextToRecognizedContext(
         ordem: event.ordem,
         event_key: metadata.eventKeyBase,
         event_title: event.event_title,
-        stage: metadata.stage,
-        actor: metadata.actor,
-        service: metadata.service,
-        tags: metadata.tags,
+        stage: normalizeStage(event.stage || metadata.stage),
+        actor: normalizeActor(event.actor || metadata.actor),
+        service: normalizeService(event.service || metadata.service),
+        tags: mergePromptTags(event.tags, metadata.tags),
         dashboard_widget: 'event_stream',
         query_hint: '',
         source_row: null,
-        source_touch_point: metadata.sourceTouchPoint
+        source_touch_point: event.source_touch_point?.trim() || metadata.sourceTouchPoint
       };
     }),
     assumptions: normalizedCandidateContext.assumptions
-  });
+  }, options);
 }
 
 export function applyNormalizationReview(
@@ -173,9 +172,6 @@ export function imageObservationToCandidateContext(
     }))
     .filter((flow) => flow.name !== '' && flow.orderedEventTitles.length > 0);
   const eventOrder = buildObservedEventOrder(observedEvents, observedFlows);
-  const eventVisualSemanticsByTitle = new Map(
-    observation.eventVisualSemantics.map((semantic) => [semantic.eventTitle.trim(), semantic])
-  );
   const strongestTouchPointByEvent = buildStrongestTouchPointByEvent(
     observedEvents,
     sanitizedCorrelations,
@@ -193,8 +189,6 @@ export function imageObservationToCandidateContext(
       touchPoint,
       projectMetadata.businessDomain
     );
-    const semantic = eventVisualSemanticsByTitle.get(eventTitle);
-
     return {
       event_title: eventTitle,
       stage: metadata.stage,
@@ -202,11 +196,7 @@ export function imageObservationToCandidateContext(
       service: metadata.service,
       tags: buildTags({
         touchPoint,
-        businessDomain: projectMetadata.businessDomain,
-        domain: metadata.domain,
-        subdomain: metadata.subdomain,
-        metricType: inferMetricType(eventTitle, semantic?.role),
-        sourceSheet: projectMetadata.sourceSheet
+        businessDomain: projectMetadata.businessDomain
       }),
       source_touch_point: touchPoint
     };
@@ -290,10 +280,10 @@ export function normalizeCandidateContextDomainModels(
     const metadata = buildEventMetadata(event, candidateContext, projectMetadata);
     return {
       ...event,
-      stage: metadata.stage,
-      actor: metadata.actor,
-      service: metadata.service,
-      tags: metadata.tags,
+      stage: normalizeStage(event.stage || metadata.stage),
+      actor: normalizeActor(event.actor || metadata.actor),
+      service: normalizeService(event.service || metadata.service),
+      tags: mergePromptTags(event.tags, metadata.tags),
       source_touch_point: metadata.sourceTouchPoint
     };
   });
@@ -566,7 +556,10 @@ function uniqueBy<T>(items: T[], getKey: (item: T) => string): T[] {
   return result;
 }
 
-export function canonicalizeContext(context: RecognizedContext): RecognizedContext {
+export function canonicalizeContext(
+  context: RecognizedContext,
+  options: NormalizationOptions = {}
+): RecognizedContext {
   logger.info('Normalizando contexto reconhecido', {
     rowCount: context.rows.length,
     flowCount: context.recognizedFlows.length
@@ -599,7 +592,7 @@ export function canonicalizeContext(context: RecognizedContext): RecognizedConte
         service,
         tags: normalizeTags(row.tags),
         dashboard_widget: row.dashboard_widget,
-        query_hint: `tags:(event_key:${eventKey} service:${service} source:odd)`,
+        query_hint: buildQueryHint(eventKey, options.env),
         source_row: row.source_row ?? null,
         source_touch_point: row.source_touch_point?.trim() || undefined
       };
@@ -678,7 +671,6 @@ function buildStrongestTouchPointByEvent(
 }
 
 function deriveProjectMetadata(candidateContext: CandidateContext, options: NormalizationOptions): ProjectMetadata {
-  const sourceSheet = deriveSourceSheet(options.inputImage);
   const businessDomain = inferBusinessDomain([
     ...candidateContext.candidateEvents.flatMap((event) => [
       event.event_title,
@@ -687,23 +679,22 @@ function deriveProjectMetadata(candidateContext: CandidateContext, options: Norm
       event.source_touch_point || ''
     ]),
     ...candidateContext.candidateFlows.flatMap((flow) => [flow.name, ...flow.stages, ...flow.services])
-  ], sourceSheet);
+  ], deriveSourceSheet(options.inputImage));
 
-  return { businessDomain, sourceSheet };
+  return { businessDomain };
 }
 
 function deriveProjectMetadataFromObservation(
   observation: ImageObservation,
   options: NormalizationOptions
 ): ProjectMetadata {
-  const sourceSheet = deriveSourceSheet(options.inputImage);
   const businessDomain = inferBusinessDomain([
     ...observation.touchPointsDetected,
     ...observation.textsOutsideShapes,
     ...observation.servicesDetected
-  ], sourceSheet);
+  ], deriveSourceSheet(options.inputImage));
 
-  return { businessDomain, sourceSheet };
+  return { businessDomain };
 }
 
 function deriveSourceSheet(inputImage?: string): string {
@@ -759,14 +750,9 @@ function buildEventMetadata(
     stage: touchPointMetadata.stage,
     service: touchPointMetadata.service,
     actor: normalizeActor(event.actor),
-    metricType: inferMetricType(event.event_title),
     tags: buildTags({
       touchPoint: sourceTouchPoint,
-      businessDomain: projectMetadata.businessDomain,
-      domain: touchPointMetadata.domain,
-      subdomain: touchPointMetadata.subdomain,
-      metricType: inferMetricType(event.event_title),
-      sourceSheet: projectMetadata.sourceSheet
+      businessDomain: projectMetadata.businessDomain
     }),
     eventKeyBase: buildEventKeyBase(projectMetadata.businessDomain, touchPointMetadata.service, event.event_title)
   };
@@ -824,18 +810,10 @@ function secondStageToken(stage: string): string | undefined {
 function buildTags(args: {
   touchPoint: string;
   businessDomain: string;
-  domain: string;
-  subdomain: string;
-  metricType: 'count' | 'gauge';
-  sourceSheet: string;
 }): string {
   return [
     `touch_point:${slugify(args.touchPoint)}`,
-    `business_domain:${args.businessDomain}`,
-    `domain:${args.domain}`,
-    `subdomain:${args.subdomain}`,
-    `metric_type:${args.metricType}`,
-    `source_sheet:${args.sourceSheet}`
+    `business_domain:${slugify(args.businessDomain)}`
   ].join(',');
 }
 
@@ -875,26 +853,79 @@ function normalizeActor(actor: string): string {
   return normalized;
 }
 
+function normalizeStage(stage: string): string {
+  return slugify(stage) || 'event_storming';
+}
+
 function normalizeService(service: string): string {
   const normalized = slugify(service).replace(/_/g, '.');
   return normalized === '' ? 'event.storming' : normalized;
 }
 
 function normalizeTags(tags: string): string {
-  const seen = new Set<string>();
-  const normalized = tags
+  const normalizedEntries = tags
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean)
-    .filter((tag) => {
-      if (seen.has(tag)) {
-        return false;
-      }
-      seen.add(tag);
-      return true;
-    });
+    .map((tag) => tag.split(':'))
+    .filter((parts) => parts.length >= 2)
+    .map(([rawKey, ...rawValue]) => ({
+      key: slugify(rawKey),
+      value: slugify(rawValue.join(':'))
+    }))
+    .filter((entry) => entry.key === 'touch_point' || entry.key === 'business_domain')
+    .filter((entry) => entry.value !== '');
 
-  return normalized.join(',');
+  const normalizedByKey = new Map<string, string>();
+  for (const entry of normalizedEntries) {
+    if (!normalizedByKey.has(entry.key)) {
+      normalizedByKey.set(entry.key, entry.value);
+    }
+  }
+
+  return ['touch_point', 'business_domain']
+    .map((key) => {
+      const value = normalizedByKey.get(key);
+      return value ? `${key}:${value}` : '';
+    })
+    .filter(Boolean)
+    .join(',');
+}
+
+function mergePromptTags(primary: string, fallback: string): string {
+  const mergedByKey = new Map<string, string>(parsePromptTags(normalizeTags(fallback)));
+
+  for (const [key, value] of parsePromptTags(normalizeTags(primary))) {
+    mergedByKey.set(key, value);
+  }
+
+  return ['touch_point', 'business_domain']
+    .map((key) => {
+      const value = mergedByKey.get(key);
+      return value ? `${key}:${value}` : '';
+    })
+    .filter(Boolean)
+    .join(',');
+}
+
+function buildQueryHint(eventKey: string, env?: string): string {
+  return `tags:(event_key:${eventKey} env:${normalizeEnv(env)})`;
+}
+
+function normalizeEnv(env?: string): string {
+  return slugify(env || 'dev') || 'dev';
+}
+
+function parsePromptTags(tags: string): Array<[string, string]> {
+  return tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => {
+      const [key, ...value] = tag.split(':');
+      return [key, value.join(':')] as [string, string];
+    })
+    .filter(([key, value]) => key !== '' && value !== '');
 }
 
 function normalizeEventKey(eventKey: string): string {
@@ -915,17 +946,6 @@ function ensureUniqueEventKey(eventKey: string, usage: Map<string, number>): str
     return eventKey;
   }
   return `${eventKey}.dup${count}`;
-}
-
-function inferMetricType(eventTitle: string, role?: string): 'count' | 'gauge' {
-  const normalizedTitle = slugify(eventTitle);
-  if (/(nao|falha|erro|ausente|pendente|rejeitado)/.test(normalizedTitle)) {
-    return 'count';
-  }
-  if (role === 'supporting') {
-    return 'count';
-  }
-  return 'gauge';
 }
 
 const TOUCH_POINT_NON_DOMAIN_TOKENS = new Set([

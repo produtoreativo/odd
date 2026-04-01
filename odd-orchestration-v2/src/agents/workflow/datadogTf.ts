@@ -1,4 +1,5 @@
 import { DashboardPlan, DashboardWidgetPlan } from '../../shared/types.js';
+import { buildEventQueryHint } from '../../shared/query-hint.js';
 
 type WidgetDefinition = Record<string, unknown>;
 type WidgetLayout = { x: number; y: number; width: number; height: number };
@@ -17,7 +18,7 @@ const GRID = {
   trendHeight: 10
 };
 
-const EMPTY_QUERY = 'tags:(event_key:__odd_empty__ source:odd)';
+const EMPTY_QUERY = buildEventQueryHint('__odd_empty__');
 
 function createEventQuery(name: string, searchQuery: string) {
   return {

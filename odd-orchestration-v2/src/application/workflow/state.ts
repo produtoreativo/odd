@@ -5,6 +5,7 @@ import { ObservabilityProvider } from '../../shared/provider.js';
 export const ObservabilityWorkflowGraphState = Annotation.Root({
   dashboardKey: Annotation<string>(),
   input: Annotation<string>(),
+  env: Annotation<string>(),
   dashboardTitle: Annotation<string>(),
   outputDir: Annotation<string>(),
   terraformWorkspaceDir: Annotation<string>(),

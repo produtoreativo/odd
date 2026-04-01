@@ -48,7 +48,7 @@ Formato:
       "target": "99.9%",
       "rationale": "Explica por que este SLO é relevante",
       "sourceEventKeys": ["event.key.1"],
-      "queryHint": "tags:(event_key:event.key.1 service:checkout source:odd)"
+      "queryHint": "tags:(event_key:event.key.1 env:dev)"
     }
   ]
 }

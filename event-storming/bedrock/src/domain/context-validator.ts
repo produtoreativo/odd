@@ -1,6 +1,6 @@
 import {
-  ImageObservation,
   CandidateContext,
+  ImageObservation,
   RecognizedContext,
   WorkbookPayload,
   WorkflowStage,
@@ -112,9 +112,14 @@ export function validateCandidateContext(candidateContext: CandidateContext | nu
   return normalizedIssues;
 }
 
+type ValidationOptions = {
+  env?: string;
+};
+
 export function validateRecognizedContext(
   context: RecognizedContext | null,
-  stage: WorkflowStage
+  stage: WorkflowStage,
+  options: ValidationOptions = {}
 ): string[] {
   logger.info('Validando contexto reconhecido', {
     stage,
@@ -154,7 +159,7 @@ export function validateRecognizedContext(
       issues.push(`stage não pode ser igual a event_key: ${row.event_key}`);
     }
 
-    const expectedQueryHint = `tags:(event_key:${row.event_key} service:${row.service} source:odd)`;
+    const expectedQueryHint = `tags:(event_key:${row.event_key} env:${normalizeEnv(options.env)})`;
     if (row.query_hint !== expectedQueryHint) {
       issues.push(`query_hint inválido para ${row.event_key}`);
     }
@@ -185,6 +190,10 @@ export function validateRecognizedContext(
   }
 
   return normalizedIssues;
+}
+
+function normalizeEnv(env?: string): string {
+  return slugify(env || 'dev') || 'dev';
 }
 
 export function validateWorkbook(workbook: WorkbookPayload | null): string[] {

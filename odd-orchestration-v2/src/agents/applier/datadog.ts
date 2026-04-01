@@ -1,5 +1,6 @@
 import { readJsonFile } from '../../shared/fs.js';
 import { Logger } from '../../shared/logger.js';
+import { buildEnvTag, normalizeEnv } from '../../shared/query-hint.js';
 import { CustomEventPayload, DashboardPlan, EventBurstConfig, EventIngestionResult, MetricIngestionResult, SloSuggestion } from '../../shared/types.js';
 
 const logger = new Logger('applier-datadog');
@@ -313,6 +314,7 @@ function buildSloMetricSeries(plan: DashboardPlan, dashboardKey: string, burstCo
     const counts = estimateSloCounts(plan, slo, burstConfig);
     const tags = [
       'source:odd',
+      buildEnvTag(resolveEnvFromPlan(plan)),
       `dashboard_key:${dashboardKey}`,
       `slo_id:${slo.id}`,
       `sli_type:${slo.sliType}`
@@ -333,6 +335,14 @@ function buildSloMetricSeries(plan: DashboardPlan, dashboardKey: string, burstCo
   }
 
   return series;
+}
+
+function resolveEnvFromPlan(plan: DashboardPlan): string {
+  const envTag = plan.customEvents
+    .flatMap((event) => event.tags)
+    .find((tag) => tag.startsWith('env:'));
+
+  return normalizeEnv(envTag?.slice(4));
 }
 
 function estimateSloCounts(plan: DashboardPlan, slo: SloSuggestion, burstConfig: EventBurstConfig) {

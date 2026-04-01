@@ -16,6 +16,7 @@ npm install
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
   --output-dir ./generated/payments \
+  --env dev \
   --provider bedrock
 ```
 
@@ -46,6 +47,7 @@ npm run start -- \
 - `--input-image`: caminho da imagem de event storming
 - `--output-dir`: diretório de saída
 - `--provider`: use `bedrock`
+- `--env`: ambiente usado no `query_hint`; opcional, padrão `dev`
 - `--start-from`: `observe`, `extract` ou `normalize`
 - `--image-observation`: obrigatório com `--start-from extract`
 - `--candidate-context`: obrigatório com `--start-from normalize`
@@ -77,7 +79,7 @@ As credenciais AWS podem vir do ambiente padrão do SDK:
 
 - `01-image-observation.json`
 - `01-image-observation.attempt-<n>.raw.txt`
-- `02-candidate-events.json`: eventos candidatos já enriquecidos com `source_touch_point`, `stage`, `service` e `tags` no padrão de projeto
+- `02-candidate-events.json`: eventos candidatos normalizados com `source_touch_point`, `stage`, `service` e `tags` aderentes ao contrato dos prompts
 - `02-candidate-events.attempt-<n>.raw.txt`
 - `03-standardized-context.json`: contexto reconhecido pronto para gerar a planilha final
 - `03-standardized-context.attempt-<n>.raw.txt`
@@ -101,7 +103,7 @@ Do agente 2 em diante, o pipeline tenta produzir saída compatível com o format
 
 - `stage` no padrão slug `dominio_subdominio`
 - `service` no padrão `dominio.subdominio`
-- `tags` com `touch_point`, `business_domain`, `domain`, `subdomain`, `metric_type` e `source_sheet`
+- `tags` com `touch_point` e `business_domain`
 - `source_touch_point` para preservar a origem do evento na imagem
 - `event_key` normalizado para o padrão do projeto, com deduplicação automática quando necessário
 

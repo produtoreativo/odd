@@ -1,6 +1,7 @@
 export type CliArgs = {
   inputImage: string;
   outputDir: string;
+  env: string;
   provider: 'bedrock';
   startFrom: 'observe' | 'extract' | 'normalize';
   imageObservation?: string;
@@ -18,6 +19,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
   return {
     inputImage: requireStringArg(rawArgs, 'input-image'),
     outputDir: requireStringArg(rawArgs, 'output-dir'),
+    env: optionalStringArg(rawArgs, 'env') ?? 'dev',
     provider: requireProviderArg(rawArgs),
     startFrom: requireStartFromArg(rawArgs),
     imageObservation: optionalStringArg(rawArgs, 'image-observation'),

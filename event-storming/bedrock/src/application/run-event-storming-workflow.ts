@@ -19,6 +19,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   logger.info('Iniciando execução do workflow', {
     inputImage: args.inputImage,
     outputDir: args.outputDir,
+    env: args.env,
     provider: args.provider,
     startFrom: args.startFrom,
     observeModel: agentModels.observeModel,
@@ -34,6 +35,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
       {
         inputImage: args.inputImage,
         outputDir: args.outputDir,
+        env: args.env,
         provider: args.provider,
         startFrom: args.startFrom,
         observeModel: agentModels.observeModel,
@@ -49,6 +51,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         metadata: {
           inputImage: args.inputImage,
           outputDir: args.outputDir,
+          env: args.env,
           provider: args.provider,
           startFrom: args.startFrom,
           observeModel: agentModels.observeModel,
@@ -67,6 +70,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         provider: args.provider,
+        env: args.env,
         startFrom: args.startFrom
       }
     }

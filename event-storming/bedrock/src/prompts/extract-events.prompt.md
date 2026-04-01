@@ -23,7 +23,7 @@ Regras:
 - `candidateEvents.ordem` deve ser sequencial começando em 1
 - `stage` deve refletir o agrupamento de domínio/subdomínio do evento em slug curto
 - derive `service` no padrão `dominio.subdominio` sempre que houver evidência suficiente no touch point
-- derive `tags` com o padrão `touch_point:<slug>,business_domain:<slug>,domain:<slug>,subdomain:<slug>,metric_type:<count|gauge>,source_sheet:<slug>`
+- derive `tags` com o padrão `touch_point:<slug>,business_domain:<slug>`
 - inclua `source_touch_point` quando souber qual touch point originou o evento
 - exemplos esperados:
   - `Cobrança via Checkout` -> `stage: cobranca_checkout`, `service: cobranca.checkout`
@@ -58,7 +58,7 @@ Saída:
       "stage": "string",
       "actor": "string",
       "service": "string",
-      "tags": "touch_point:checkout,business_domain:payments,domain:cobranca,subdomain:checkout,metric_type:gauge,source_sheet:odd_payments",
+      "tags": "touch_point:checkout,business_domain:payments",
       "source_touch_point": "string"
     }
   ],

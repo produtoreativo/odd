@@ -18,7 +18,7 @@ Instruções:
 - se um item parecer touch point e não evento, remova-o das linhas
 - preserve `stage` no padrão slug `dominio_subdominio`
 - preserve `service` no padrão `dominio.subdominio`
-- preserve `tags` no padrão `touch_point:<slug>,business_domain:<slug>,domain:<slug>,subdomain:<slug>,metric_type:<count|gauge>,source_sheet:<slug>`
+- preserve `tags` no padrão `touch_point:<slug>,business_domain:<slug>`
 - se faltar confiança, prefira remover em vez de inventar
 - `corrections` deve listar uma correção para cada `ordem`
 - se não quiser mudar uma linha, repita os valores originais e use `keep: true`
@@ -44,7 +44,7 @@ Instruções:
       "stage": "string",
       "actor": "string",
       "service": "string",
-      "tags": "journey:payments,domain:finance"
+      "tags": "touch_point:checkout,business_domain:payments"
     }
   ],
   "assumptions": ["string"]

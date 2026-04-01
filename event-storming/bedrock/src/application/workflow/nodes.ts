@@ -173,7 +173,7 @@ export async function extractEventsNode(state: WorkflowGraphState) {
   const model = buildChatModel(state.provider, state.extractModel);
   const deterministicCandidateContext = normalizeCandidateContextDomainModels(
     imageObservationToCandidateContext(imageObservation, { inputImage: state.inputImage }),
-    { inputImage: state.inputImage }
+    { inputImage: state.inputImage, env: state.env }
   );
   const execute = traceStep(
     async () => {
@@ -187,9 +187,9 @@ export async function extractEventsNode(state: WorkflowGraphState) {
         enrichCandidateContextFromObservation(
           CandidateContextSchema.parse(parseJsonResponse(response.content)),
           imageObservation,
-          { inputImage: state.inputImage }
+          { inputImage: state.inputImage, env: state.env }
         ),
-        { inputImage: state.inputImage }
+        { inputImage: state.inputImage, env: state.env }
       );
       await persistStageJson(state.outputDir, '02-candidate-events.json', candidateContext);
 
@@ -304,7 +304,8 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
 
   const model = buildChatModel(state.provider, state.normalizeModel);
   const deterministicContext = candidateContextToRecognizedContext(candidateContext, {
-    inputImage: state.inputImage
+    inputImage: state.inputImage,
+    env: state.env
   });
   const execute = traceStep(
     async () => {
@@ -316,8 +317,9 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
 
       const review = NormalizationReviewSchema.parse(parseJsonResponse(response.content));
       const standardizedContext = canonicalizeContext(applyNormalizationReview(candidateContext, review, {
-        inputImage: state.inputImage
-      }));
+        inputImage: state.inputImage,
+        env: state.env
+      }), { env: state.env });
 
       await persistStageJson(state.outputDir, '03-standardized-context.json', standardizedContext);
 
@@ -357,7 +359,7 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
       error: message
     });
 
-    const standardizedContext = canonicalizeContext(deterministicContext);
+    const standardizedContext = canonicalizeContext(deterministicContext, { env: state.env });
     await persistStageJson(state.outputDir, '03-standardized-context.json', standardizedContext);
 
     return {
@@ -377,7 +379,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
 
   const execute = traceStep(
     async () => {
-      const issues = validateRecognizedContext(state.standardizedContext, 'normalize');
+      const issues = validateRecognizedContext(state.standardizedContext, 'normalize', { env: state.env });
       if (issues.length === 0) {
         logger.info('Validação da normalização concluída sem erros');
         return {
@@ -627,7 +629,7 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
     },
     {
       item: 'mapping_tags',
-      detail: 'tags incluem touch_point, business_domain, domain, subdomain, metric_type e source_sheet.'
+      detail: 'tags seguem o padrão touch_point:<slug>,business_domain:<slug>.'
     }
   ];
 

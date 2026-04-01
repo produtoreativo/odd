@@ -29,6 +29,7 @@ export type WorkflowStepMetrics = {
 export const GraphState = Annotation.Root({
   inputImage: Annotation<string>(),
   outputDir: Annotation<string>(),
+  env: Annotation<string>(),
   provider: Annotation<SupportedProvider>(),
   startFrom: Annotation<'observe' | 'extract' | 'normalize'>(),
   observeModel: Annotation<string>(),
