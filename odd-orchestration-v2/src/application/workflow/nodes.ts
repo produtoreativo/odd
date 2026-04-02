@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
-import { applyDatadog } from '../../agents/applier/index.js';
+import { applyDatadog, applyDynatrace, applyTerraformOnly } from '../../agents/applier/index.js';
 import { buildDatadogSloTerraform } from '../../infrastructure/observability/datadog-slo-terraform.js';
 import { buildDatadogDashboardTerraform } from '../../infrastructure/observability/datadog-dashboard-terraform.js';
 import { buildDynatraceDashboardTerraform } from '../../infrastructure/observability/dynatrace-dashboard-terraform.js';
@@ -255,13 +255,9 @@ export async function compileSloTerraformNode(state: ObservabilityWorkflowState)
   };
 }
 
-export async function applyDatadogNode(state: ObservabilityWorkflowState) {
+export async function applyProviderNode(state: ObservabilityWorkflowState) {
   if (!state.plan) {
     throw new Error('Estado inválido: plan ausente para apply.');
-  }
-
-  if (state.provider !== 'datadog') {
-    throw new Error(`Apply no workflow ainda não suportado para provider ${state.provider}.`);
   }
 
   logger.info('Etapa apply iniciada', {
@@ -273,26 +269,44 @@ export async function applyDatadogNode(state: ObservabilityWorkflowState) {
     terraformWorkspaceDir: state.terraformWorkspaceDir
   });
 
-  const eventsFile = path.join(state.outputDir, 'custom-events.json');
-  const planFile = path.join(state.outputDir, 'plan.json');
   await ensureDir(state.outputDir);
-  await writeFile(eventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
+  const planFile = path.join(state.outputDir, 'plan.json');
+  const eventsFile = path.join(state.outputDir, 'custom-events.json');
   await writeJsonFile(planFile, state.plan);
+  await writeFile(eventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
 
-  const applyReport = await applyDatadog({
-    dashboardKey: state.dashboardKey,
-    terraformDir: state.terraformWorkspaceDir,
-    eventsFile,
-    planFile,
-    outputDir: state.outputDir,
-    dryRun: state.dryRun,
-    burstConfig: state.eventBurstConfig
-  });
+  const applyReport = state.provider === 'datadog'
+    ? await (async () => {
+      return applyDatadog({
+        dashboardKey: state.dashboardKey,
+        terraformDir: state.terraformWorkspaceDir,
+        eventsFile,
+        planFile,
+        outputDir: state.outputDir,
+        dryRun: state.dryRun,
+        burstConfig: state.eventBurstConfig
+      });
+    })()
+    : state.provider === 'dynatrace'
+      ? await applyDynatrace({
+        dashboardKey: state.dashboardKey,
+        terraformDir: state.terraformWorkspaceDir,
+        eventsFile,
+        outputDir: state.outputDir,
+        dryRun: state.dryRun
+      })
+    : await applyTerraformOnly({
+      provider: state.provider,
+      dashboardKey: state.dashboardKey,
+      terraformDir: state.terraformWorkspaceDir,
+      outputDir: state.outputDir,
+      dryRun: state.dryRun
+    });
 
   logger.info('Etapa apply concluída', {
     provider: applyReport.provider,
     dryRun: applyReport.dryRun,
-    failedEventsCount: applyReport.failedEventsCount,
+    failedEventsCount: 'failedEventsCount' in applyReport ? applyReport.failedEventsCount : 0,
     terraformError: applyReport.terraformError
   });
 

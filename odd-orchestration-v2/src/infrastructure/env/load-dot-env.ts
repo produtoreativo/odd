@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const DEFAULT_ENV_PATHS = [
   '.env',
+  path.resolve(process.cwd(), '../odd-orchestrator/.env'),
   path.resolve(process.cwd(), '../event-storming/bedrock/.env')
 ];
 

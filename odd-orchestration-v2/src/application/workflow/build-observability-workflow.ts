@@ -1,7 +1,7 @@
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { ObservabilityWorkflowGraphState } from './state.js';
 import {
-  applyDatadogNode,
+  applyProviderNode,
   buildPlanNode,
   categorizeEventsNode,
   compileTerraformNode,
@@ -27,7 +27,7 @@ export function buildObservabilityWorkflow() {
     .addNode('build_plan', buildPlanNode)
     .addNode('compile_terraform', compileTerraformNode)
     .addNode('compile_slo_terraform', compileSloTerraformNode)
-    .addNode('apply_datadog', applyDatadogNode)
+    .addNode('apply_provider', applyProviderNode)
     .addConditionalEdges(START, routeFromStart)
     .addConditionalEdges('load_input', routeAfterInput)
     .addConditionalEdges('categorize_events', routeAfterCategorize)
@@ -35,6 +35,6 @@ export function buildObservabilityWorkflow() {
     .addConditionalEdges('build_plan', routeAfterPlan)
     .addConditionalEdges('compile_terraform', routeAfterDashboardTerraform)
     .addConditionalEdges('compile_slo_terraform', routeAfterSloTerraform)
-    .addEdge('apply_datadog', END)
+    .addEdge('apply_provider', END)
     .compile();
 }

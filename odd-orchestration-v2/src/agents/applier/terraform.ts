@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { Logger } from '../../shared/logger.js';
+import { ObservabilityProvider } from '../../shared/provider.js';
 
 const logger = new Logger('applier-terraform');
 
-export async function runTerraform(dir: string, dryRun: boolean): Promise<string[]> {
+export async function runTerraform(dir: string, dryRun: boolean, provider: ObservabilityProvider = 'datadog'): Promise<string[]> {
   const commands = [
     ['terraform', ['init', '-input=false']],
     ['terraform', ['apply', '-auto-approve', '-input=false']]
@@ -23,32 +24,43 @@ export async function runTerraform(dir: string, dryRun: boolean): Promise<string
       continue;
     }
 
-    await exec(command, args, dir, terraformEnv());
+    await exec(command, args, dir, terraformEnv(provider));
   }
 
   return executed;
 }
 
-function terraformEnv(): NodeJS.ProcessEnv {
+function terraformEnv(provider: ObservabilityProvider): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  const apiKey = env.DD_API_KEY;
-  const appKey = env.DD_APP_KEY;
-  const apiUrl = env.DD_API_BASE_URL ?? (env.DD_SITE ? `https://api.${env.DD_SITE}` : undefined);
+  if (provider === 'datadog') {
+    const apiKey = env.DD_API_KEY;
+    const appKey = env.DD_APP_KEY;
+    const apiUrl = env.DD_API_BASE_URL ?? (env.DD_SITE ? `https://api.${env.DD_SITE}` : undefined);
 
-  if (apiKey) {
-    env.TF_VAR_datadog_api_key = apiKey;
-  }
-  if (appKey) {
-    env.TF_VAR_datadog_app_key = appKey;
-  }
-  if (apiUrl) {
-    env.TF_VAR_datadog_api_url = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
+    if (apiKey) {
+      env.TF_VAR_datadog_api_key = apiKey;
+    }
+    if (appKey) {
+      env.TF_VAR_datadog_app_key = appKey;
+    }
+    if (apiUrl) {
+      env.TF_VAR_datadog_api_url = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
+    }
+
+    logger.debug('Ambiente terraform resolvido', {
+      provider,
+      hasDatadogApiKey: Boolean(apiKey),
+      hasDatadogAppKey: Boolean(appKey),
+      datadogApiUrl: env.TF_VAR_datadog_api_url
+    });
+    return env;
   }
 
   logger.debug('Ambiente terraform resolvido', {
-    hasDatadogApiKey: Boolean(apiKey),
-    hasDatadogAppKey: Boolean(appKey),
-    datadogApiUrl: env.TF_VAR_datadog_api_url
+    provider,
+    hasDynatraceEnvUrl: Boolean(env.DYNATRACE_ENV_URL),
+    hasDynatraceApiToken: Boolean(env.DYNATRACE_API_TOKEN),
+    hasDynatracePlatformToken: Boolean(env.DYNATRACE_PLATFORM_TOKEN)
   });
 
   return env;

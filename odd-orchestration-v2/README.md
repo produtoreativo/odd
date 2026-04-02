@@ -40,7 +40,7 @@ O workflow possui estas etapas:
 4. `plan`: geração do `plan.json`
 5. `terraform`: compilação do Terraform do dashboard
 6. `slo_terraform`: compilação do Terraform dos SLOs sugeridos
-7. `apply`: `terraform init`, `terraform apply`, envio dos eventos para o Datadog em batch e envio das métricas sintéticas dos SLOs
+7. `apply`: `terraform init` e `terraform apply` para todos os providers; no Datadog também executa envio dos eventos em batch e das métricas sintéticas dos SLOs
 
 Na CLI, `--end-at terraform` continua representando o fechamento do bundle Terraform completo. Internamente o workflow passa por dashboard Terraform e SLO Terraform antes de encerrar ou aplicar.
 
@@ -98,7 +98,7 @@ Sem parâmetros extras de etapa, o comando executa tudo:
 - `plan`
 - `terraform`
 - `slo_terraform`
-- `apply` para `datadog`
+- `apply` para qualquer provider suportado
 
 Exemplo:
 
@@ -272,7 +272,11 @@ Default final de modelo:
 
 ## Applier Datadog
 
-O `applier` atual está implementado para Datadog.
+O `applier` suporta:
+
+- `datadog`: terraform + ingestão de eventos + métricas sintéticas
+- `dynatrace`: terraform
+- `grafana`: terraform
 
 Ele executa:
 

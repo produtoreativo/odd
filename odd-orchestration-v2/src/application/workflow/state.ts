@@ -1,5 +1,5 @@
 import { Annotation } from '@langchain/langgraph';
-import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../../shared/types.js';
+import { ApplyReport, CategorizedEvents, DashboardPlan, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../../shared/types.js';
 import { ObservabilityProvider } from '../../shared/provider.js';
 
 export const ObservabilityWorkflowGraphState = Annotation.Root({
@@ -23,7 +23,7 @@ export const ObservabilityWorkflowGraphState = Annotation.Root({
   dashboardTerraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
   sloTerraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
   terraformJson: Annotation<Record<string, unknown> | null>({ default: () => null, reducer: (_, right) => right }),
-  applyReport: Annotation<DatadogApplyReport | null>({ default: () => null, reducer: (_, right) => right })
+  applyReport: Annotation<ApplyReport | null>({ default: () => null, reducer: (_, right) => right })
 });
 
 export type ObservabilityWorkflowState = typeof ObservabilityWorkflowGraphState.State;

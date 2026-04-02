@@ -39,5 +39,5 @@ export function routeAfterDashboardTerraform() {
 }
 
 export function routeAfterSloTerraform(state: ObservabilityWorkflowState) {
-  return state.endAt === 'terraform' ? END : 'apply_datadog';
+  return state.endAt === 'terraform' ? END : 'apply_provider';
 }

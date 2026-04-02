@@ -123,6 +123,23 @@ export type MetricIngestionResult = {
   error?: string;
 };
 
+export type TerraformApplyReport = {
+  provider: 'dynatrace' | 'grafana';
+  dashboardKey: string;
+  dryRun: boolean;
+  terraformDir: string;
+  eventsFile?: string;
+  terraformCommands: string[];
+  terraformError?: string;
+  failedEventsCount?: number;
+  ingestedEvents?: Array<{
+    title: string;
+    status: 'sent' | 'dry-run' | 'failed';
+    response?: unknown;
+    error?: string;
+  }>;
+};
+
 export type DatadogApplyReport = {
   provider: 'datadog';
   dashboardKey: string;
@@ -138,6 +155,8 @@ export type DatadogApplyReport = {
   failedMetricsCount: number;
   ingestedMetrics: MetricIngestionResult[];
 };
+
+export type ApplyReport = DatadogApplyReport | TerraformApplyReport;
 
 export type TerraformArtifacts = {
   dashboard: Record<string, unknown> | null;

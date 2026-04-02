@@ -7,7 +7,7 @@ import { buildFlowOccurrences } from '../shared/flow-occurrences.js';
 import { buildEventQueryHint, normalizeEnv } from '../shared/query-hint.js';
 import { ensureDir, readJsonFile, writeJsonFile } from '../infrastructure/filesystem/file-system.js';
 import { Logger } from '../shared/logger.js';
-import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../shared/types.js';
+import { ApplyReport, CategorizedEvents, DashboardPlan, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../shared/types.js';
 import { WorkflowCliArgs } from '../shared/args.js';
 
 const logger = new Logger('run-observability-workflow');
@@ -32,10 +32,6 @@ export async function runObservabilityWorkflow(args: WorkflowCliArgs): Promise<v
 
   await ensureDir(outputDir);
   await prepareTerraformWorkspace(provider, terraformWorkspaceDir);
-
-  if (args.endAt === 'apply' && provider !== 'datadog') {
-    throw new Error(`Etapa apply no workflow ainda não suportada para provider ${provider}.`);
-  }
 
   logger.info('Iniciando workflow v2', {
     input: args.input,
@@ -219,7 +215,7 @@ async function persistArtifacts(
     dashboardTerraformJson: Record<string, unknown> | null;
     sloTerraformJson: Record<string, unknown> | null;
     terraformJson: Record<string, unknown> | null;
-    applyReport: DatadogApplyReport | null;
+    applyReport: ApplyReport | null;
   }
 ) {
   if (result.rows.length > 0) {
