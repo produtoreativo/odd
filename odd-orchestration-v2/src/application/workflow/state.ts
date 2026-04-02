@@ -1,5 +1,5 @@
 import { Annotation } from '@langchain/langgraph';
-import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, SloSuggestion } from '../../shared/types.js';
+import { CategorizedEvents, DashboardPlan, DatadogApplyReport, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../../shared/types.js';
 import { ObservabilityProvider } from '../../shared/provider.js';
 
 export const ObservabilityWorkflowGraphState = Annotation.Root({
@@ -15,6 +15,8 @@ export const ObservabilityWorkflowGraphState = Annotation.Root({
   startFrom: Annotation<'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply'>(),
   endAt: Annotation<'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply'>(),
   rows: Annotation<EventStormingRow[]>({ default: () => [], reducer: (_, right) => right }),
+  recognizedFlows: Annotation<RecognizedFlow[]>({ default: () => [], reducer: (_, right) => right }),
+  flowOccurrences: Annotation<FlowOccurrence[]>({ default: () => [], reducer: (_, right) => right }),
   categorized: Annotation<CategorizedEvents | null>({ default: () => null, reducer: (_, right) => right }),
   sloSuggestions: Annotation<SloSuggestion[]>({ default: () => [], reducer: (_, right) => right }),
   plan: Annotation<DashboardPlan | null>({ default: () => null, reducer: (_, right) => right }),

@@ -64,6 +64,41 @@ function metricQuery(metricName: string, dashboardKey: string, slo: SloSuggestio
   return `sum:${metricName}{dashboard_key:${dashboardKey},slo_id:${slo.id},source:odd,env:${normalizeEnv(env)}}.as_count()`;
 }
 
+function stableBaseName(slo: SloSuggestion): string {
+  return slo.id
+    .replace(/_(availability|latency|error_rate|throughput)$/, '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function stableSloName(slo: SloSuggestion): string {
+  const base = stableBaseName(slo);
+
+  switch (slo.sliType) {
+    case 'availability':
+      return `${base} Availability`;
+    case 'error_rate':
+      return `${base} Error Rate`;
+    case 'latency':
+      return `${base} Latency`;
+    case 'throughput':
+      return `${base} Throughput`;
+    default:
+      return base;
+  }
+}
+
+function stableSloDescription(slo: SloSuggestion): string {
+  const sources = slo.sourceEventKeys.join(', ');
+  return [
+    `Stable SLO for ${stableSloName(slo)}.`,
+    `SLI type: ${slo.sliType}.`,
+    `Source events: ${sources}.`
+  ].join(' ');
+}
+
 export async function buildDatadogSloTerraform(
   plan: DashboardPlan,
   dashboardKey: string,
@@ -78,9 +113,9 @@ export async function buildDatadogSloTerraform(
     const tags = buildTags(dashboardKey, slo, env);
 
     slos[sloName] = {
-      name: `${plan.dashboardTitle} | ${slo.name}`,
+      name: `${plan.dashboardTitle} | ${stableSloName(slo)}`,
       type: 'metric',
-      description: `${slo.objective}\n\n${slo.rationale}`,
+      description: stableSloDescription(slo),
       query: {
         numerator: metricQuery(GOOD_METRIC, dashboardKey, slo, env),
         denominator: metricQuery(TOTAL_METRIC, dashboardKey, slo, env)

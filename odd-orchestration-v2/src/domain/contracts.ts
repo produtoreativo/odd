@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 export const SupportedWidgetSchema = z.enum(['event_stream', 'note', 'query_value', 'timeseries']);
 export const DashboardSectionTypeSchema = z.enum(['problems', 'normal']);
-export const DashboardBandIdSchema = z.enum(['hero_alert', 'failure_kpis', 'failure_trends', 'success_kpis', 'success_trends']);
-export const DashboardVisualRoleSchema = z.enum(['hero_alert', 'kpi', 'trend']);
 export const DashboardPaletteSchema = z.enum(['alert', 'warning', 'success', 'neutral']);
 
 export const EventStormingRowSchema = z.object({
@@ -31,6 +29,7 @@ export const SloSuggestionSchema = z.object({
   target: z.string().min(1),
   rationale: z.string().min(1),
   sourceEventKeys: z.array(z.string().min(1)).min(1),
+  sourceOccurrenceKeys: z.array(z.string().min(1)).min(1).optional(),
   queryHint: z.string().min(1)
 });
 
@@ -42,14 +41,15 @@ export const DashboardWidgetPlanSchema = z.object({
   stage: z.string().min(1),
   sectionType: DashboardSectionTypeSchema,
   sourceEventKeys: z.array(z.string().min(1)).min(1),
-  visualRole: DashboardVisualRoleSchema,
+  sourceOccurrenceKeys: z.array(z.string().min(1)).min(1).optional(),
+  visualRole: z.string().min(1),
   palette: DashboardPaletteSchema,
   thresholdValue: z.number().optional(),
   thresholdDirection: z.enum(['above_bad', 'below_bad', 'at_least_good']).optional()
 });
 
 export const DashboardBandPlanSchema = z.object({
-  id: DashboardBandIdSchema,
+  id: z.string().min(1),
   title: z.string().min(1),
   sectionType: DashboardSectionTypeSchema,
   widgets: z.array(DashboardWidgetPlanSchema)
@@ -67,7 +67,7 @@ export const CustomEventPayloadSchema = z.object({
 
 export const DashboardPlanSchema = z.object({
   dashboardTitle: z.string().min(1),
-  bands: z.array(DashboardBandPlanSchema).length(5),
+  bands: z.array(DashboardBandPlanSchema).min(1),
   customEvents: z.array(CustomEventPayloadSchema),
   sloSuggestions: z.array(SloSuggestionSchema).min(3).max(5),
   assumptions: z.array(z.string())

@@ -153,6 +153,10 @@ function buildHeroPanel(panels: GrafanaPanel[], nextId: number, band: DashboardB
   return { nextId: nextId + 1, nextTop: GRID.heroHeight + GRID.sectionGap };
 }
 
+function isHeroBand(band: DashboardBandPlan): boolean {
+  return band.widgets.some((widget) => widget.visualRole === 'hero_alert');
+}
+
 function buildBandPanels(
   panels: GrafanaPanel[],
   startingId: number,
@@ -178,7 +182,7 @@ function buildBandPanels(
     return { nextId: id + 1, nextTop: contentTop + height + GRID.sectionGap };
   }
 
-  const columns = Math.max(1, Math.min(3, widgets.length));
+  const columns = Math.max(1, widgets.length);
   const rows = Math.ceil(widgets.length / columns);
 
   widgets.forEach((widget, index) => {
@@ -203,24 +207,25 @@ function buildBandPanels(
 }
 
 function buildGrafanaDashboard(plan: DashboardPlan): Record<string, unknown> {
-  const [heroBand, failureKpis, failureTrends, successKpis, successTrends] = plan.bands;
   const panels: GrafanaPanel[] = [];
+  let nextId = 1;
+  let nextTop = 0;
 
-  let { nextId, nextTop } = buildHeroPanel(panels, 1, heroBand);
+  for (const band of plan.bands) {
+    if (isHeroBand(band)) {
+      const heroResult = buildHeroPanel(panels, nextId, band);
+      nextId = heroResult.nextId;
+      nextTop = heroResult.nextTop;
+      continue;
+    }
 
-  const failureKpisResult = buildBandPanels(panels, nextId, failureKpis, 'Falhas por evento', nextTop, GRID.rowHeight);
-  nextId = failureKpisResult.nextId;
-  nextTop = failureKpisResult.nextTop;
-
-  const failureTrendsResult = buildBandPanels(panels, nextId, failureTrends, 'Falhas por etapa', nextTop, GRID.trendHeight);
-  nextId = failureTrendsResult.nextId;
-  nextTop = failureTrendsResult.nextTop;
-
-  const successKpisResult = buildBandPanels(panels, nextId, successKpis, 'Sucessos por evento', nextTop, GRID.rowHeight);
-  nextId = successKpisResult.nextId;
-  nextTop = successKpisResult.nextTop;
-
-  buildBandPanels(panels, nextId, successTrends, 'Sucessos por etapa', nextTop, GRID.trendHeight);
+    const bandHeight = band.widgets.some((widget) => widget.widgetType === 'timeseries')
+      ? GRID.trendHeight
+      : GRID.rowHeight;
+    const bandResult = buildBandPanels(panels, nextId, band, band.title, nextTop, bandHeight);
+    nextId = bandResult.nextId;
+    nextTop = bandResult.nextTop;
+  }
 
   return {
     title: plan.dashboardTitle,

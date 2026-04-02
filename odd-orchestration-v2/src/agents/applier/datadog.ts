@@ -4,8 +4,11 @@ import { buildEnvTag, normalizeEnv } from '../../shared/query-hint.js';
 import { CustomEventPayload, DashboardPlan, EventBurstConfig, EventIngestionResult, MetricIngestionResult, SloSuggestion } from '../../shared/types.js';
 
 const logger = new Logger('applier-datadog');
+const EVENT_METRIC = 'odd.workflow.event.count';
 const GOOD_METRIC = 'odd.workflow.slo.good';
 const TOTAL_METRIC = 'odd.workflow.slo.total';
+const DASHBOARD_WINDOW_SECONDS = 5 * 60;
+const DEFAULT_RANDOM_MAX_COPIES = 5;
 
 export async function readEvents(filePath: string): Promise<CustomEventPayload[]> {
   const events = await readJsonFile<CustomEventPayload[]>(filePath);
@@ -28,7 +31,8 @@ export async function ingestEvents(
   const events = await readEvents(filePath);
   const batchSize = resolveBatchSize();
   const burstConfig = resolveBurstConfig(burstOverrides);
-  const scheduledEventsCount = events.length * burstConfig.burstCount * burstConfig.copiesPerEvent;
+  const scheduledEvents = expandEventsForSimulation(events, burstConfig);
+  const scheduledEventsCount = scheduledEvents.length;
   logger.info('Iniciando ingestão Datadog', {
     filePath,
     dryRun,
@@ -37,6 +41,7 @@ export async function ingestEvents(
     burstCount: burstConfig.burstCount,
     burstIntervalMs: burstConfig.burstIntervalMs,
     copiesPerEvent: burstConfig.copiesPerEvent,
+    randomizeEventCounts: burstConfig.randomizeEventCounts,
     scheduledEventsCount
   });
 
@@ -47,7 +52,7 @@ export async function ingestEvents(
     return {
       burstConfig,
       scheduledEventsCount,
-      results: expandEventsForSimulation(events, burstConfig).map((item) => ({
+      results: scheduledEvents.map((item) => ({
         title: item.event.title,
         burstIndex: item.burstIndex,
         copyIndex: item.copyIndex,
@@ -57,7 +62,6 @@ export async function ingestEvents(
   }
 
   const results: EventIngestionResult[] = [];
-  const scheduledEvents = expandEventsForSimulation(events, burstConfig);
 
   for (let index = 0; index < scheduledEvents.length; index += batchSize) {
     const chunk = scheduledEvents.slice(index, index + batchSize);
@@ -142,7 +146,10 @@ export async function ingestSloMetrics(args: {
 
   const plan = await readJsonFile<DashboardPlan>(args.planFile);
   const burstConfig = resolveBurstConfig(args.burstConfig ?? {});
-  const series = buildSloMetricSeries(plan, args.dashboardKey, burstConfig);
+  const series = [
+    ...buildEventMetricSeries(plan, args.dashboardKey, burstConfig),
+    ...buildSloMetricSeries(plan, args.dashboardKey, burstConfig)
+  ];
   logger.info('Iniciando ingestão de métricas de SLO', {
     planFile: args.planFile,
     dashboardKey: args.dashboardKey,
@@ -196,10 +203,17 @@ function resolveBatchSize(): number {
 }
 
 function resolveBurstConfig(overrides: Partial<EventBurstConfig>): EventBurstConfig {
+  const randomizeEventCounts = overrides.randomizeEventCounts === true;
   return {
     burstCount: resolvePositiveInteger(overrides.burstCount, process.env.DD_EVENT_BURST_COUNT, 1),
     burstIntervalMs: resolveNonNegativeInteger(overrides.burstIntervalMs, process.env.DD_EVENT_BURST_INTERVAL_MS, 0),
-    copiesPerEvent: resolvePositiveInteger(overrides.copiesPerEvent, process.env.DD_EVENT_BURST_REPEAT_PER_EVENT, 1)
+    copiesPerEvent: resolvePositiveInteger(
+      overrides.copiesPerEvent,
+      process.env.DD_EVENT_BURST_REPEAT_PER_EVENT,
+      randomizeEventCounts ? DEFAULT_RANDOM_MAX_COPIES : 1
+    ),
+    randomizeEventCounts,
+    randomSeed: Number.isFinite(overrides.randomSeed) ? (overrides.randomSeed as number) : Date.now()
   };
 }
 
@@ -226,9 +240,10 @@ function expandEventsForSimulation(events: CustomEventPayload[], burstConfig: Ev
 
   for (let burstIndex = 1; burstIndex <= burstConfig.burstCount; burstIndex += 1) {
     for (const baseEvent of events) {
-      for (let copyIndex = 1; copyIndex <= burstConfig.copiesPerEvent; copyIndex += 1) {
+      const copiesForEvent = resolveCopiesForEvent(baseEvent.title, burstIndex, burstConfig);
+      for (let copyIndex = 1; copyIndex <= copiesForEvent; copyIndex += 1) {
         expanded.push({
-          event: withSimulationMetadata(baseEvent, burstIndex, copyIndex, burstConfig),
+          event: withSimulationMetadata(baseEvent, burstIndex, copyIndex, copiesForEvent, burstConfig),
           burstIndex,
           copyIndex
         });
@@ -243,15 +258,17 @@ function withSimulationMetadata(
   event: CustomEventPayload,
   burstIndex: number,
   copyIndex: number,
+  copiesForEvent: number,
   burstConfig: EventBurstConfig
 ): CustomEventPayload {
   const tags = [
     ...event.tags,
     'simulation:true',
     'simulation_profile:periodic_burst',
+    `simulation_randomized:${burstConfig.randomizeEventCounts}`,
     `simulation_burst:${burstIndex}`,
     `simulation_copy:${copyIndex}`,
-    `simulation_copies_per_event:${burstConfig.copiesPerEvent}`,
+    `simulation_copies_for_event:${copiesForEvent}`,
     `simulation_total_bursts:${burstConfig.burstCount}`
   ];
 
@@ -302,7 +319,7 @@ async function sendEvent(event: CustomEventPayload): Promise<unknown> {
 }
 
 function buildSloMetricSeries(plan: DashboardPlan, dashboardKey: string, burstConfig: EventBurstConfig) {
-  const now = Math.floor(Date.now() / 1000);
+  const burstTimestamps = buildBurstTimestamps(burstConfig);
   const series: Array<{
     metric: string;
     type: 'count';
@@ -311,7 +328,6 @@ function buildSloMetricSeries(plan: DashboardPlan, dashboardKey: string, burstCo
   }> = [];
 
   for (const slo of plan.sloSuggestions) {
-    const counts = estimateSloCounts(plan, slo, burstConfig);
     const tags = [
       'source:odd',
       buildEnvTag(resolveEnvFromPlan(plan)),
@@ -323,18 +339,33 @@ function buildSloMetricSeries(plan: DashboardPlan, dashboardKey: string, burstCo
     series.push({
       metric: GOOD_METRIC,
       type: 'count',
-      points: [[now, counts.good]],
+      points: burstTimestamps.map((timestamp, index) => [timestamp, estimateSloCountsForBurst(plan, slo, index + 1, burstConfig).good]),
       tags
     });
     series.push({
       metric: TOTAL_METRIC,
       type: 'count',
-      points: [[now, counts.total]],
+      points: burstTimestamps.map((timestamp, index) => [timestamp, estimateSloCountsForBurst(plan, slo, index + 1, burstConfig).total]),
       tags
     });
   }
 
   return series;
+}
+
+function buildEventMetricSeries(plan: DashboardPlan, dashboardKey: string, burstConfig: EventBurstConfig) {
+  const burstTimestamps = buildBurstTimestamps(burstConfig);
+  return plan.customEvents.map((event) => ({
+    metric: EVENT_METRIC,
+    type: 'count' as const,
+    points: burstTimestamps.map((timestamp, index) => [timestamp, resolveCopiesForEvent(event.title, index + 1, burstConfig)]) as Array<[number, number]>,
+    tags: [
+      'source:odd',
+      buildEnvTag(resolveEnvFromPlan(plan)),
+      `dashboard_key:${dashboardKey}`,
+      ...event.tags.filter(Boolean)
+    ]
+  }));
 }
 
 function resolveEnvFromPlan(plan: DashboardPlan): string {
@@ -345,9 +376,11 @@ function resolveEnvFromPlan(plan: DashboardPlan): string {
   return normalizeEnv(envTag?.slice(4));
 }
 
-function estimateSloCounts(plan: DashboardPlan, slo: SloSuggestion, burstConfig: EventBurstConfig) {
+function estimateSloCountsForBurst(plan: DashboardPlan, slo: SloSuggestion, burstIndex: number, burstConfig: EventBurstConfig) {
   const sourceEvents = plan.customEvents.filter((event) => slo.sourceEventKeys.includes(event.title));
-  const eventCount = Math.max(1, sourceEvents.length * burstConfig.burstCount * burstConfig.copiesPerEvent);
+  const eventCount = sourceEvents.length > 0
+    ? sourceEvents.reduce((sum, event) => sum + resolveCopiesForEvent(event.title, burstIndex, burstConfig), 0)
+    : Math.max(1, slo.sourceOccurrenceKeys?.length ?? 1) * resolveCopiesForEvent(slo.id, burstIndex, burstConfig);
   const target = parseTargetPercentage(slo.target);
   const successRatio = slo.sliType === 'error_rate'
     ? (target <= 50 ? (100 - target) / 100 : target / 100)
@@ -357,6 +390,38 @@ function estimateSloCounts(plan: DashboardPlan, slo: SloSuggestion, burstConfig:
   const good = Math.max(1, Math.min(total, Math.round(total * boundedRatio)));
 
   return { good, total };
+}
+
+function resolveCopiesForEvent(identifier: string, burstIndex: number, burstConfig: EventBurstConfig): number {
+  if (!burstConfig.randomizeEventCounts) {
+    return burstConfig.copiesPerEvent;
+  }
+
+  const maxCopies = Math.max(2, burstConfig.copiesPerEvent);
+  const hash = hashString(`${burstConfig.randomSeed}:${identifier}:${burstIndex}`);
+  return 1 + (hash % maxCopies);
+}
+
+function buildBurstTimestamps(burstConfig: EventBurstConfig): number[] {
+  const now = Math.floor(Date.now() / 1000);
+  if (burstConfig.burstCount <= 1) {
+    return [now];
+  }
+
+  const interval = Math.max(1, Math.floor(DASHBOARD_WINDOW_SECONDS / burstConfig.burstCount));
+  return Array.from({ length: burstConfig.burstCount }, (_, index) => {
+    const reverseIndex = burstConfig.burstCount - 1 - index;
+    return now - (reverseIndex * interval);
+  });
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash);
 }
 
 function parseTargetPercentage(target: string): number {

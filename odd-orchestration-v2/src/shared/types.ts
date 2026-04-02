@@ -1,7 +1,7 @@
 export type SupportedWidget = 'event_stream' | 'note' | 'query_value' | 'timeseries';
 export type DashboardSectionType = 'problems' | 'normal';
-export type DashboardBandId = 'hero_alert' | 'failure_kpis' | 'failure_trends' | 'success_kpis' | 'success_trends';
-export type DashboardVisualRole = 'hero_alert' | 'kpi' | 'trend';
+export type DashboardBandId = string;
+export type DashboardVisualRole = string;
 export type DashboardPalette = 'alert' | 'warning' | 'success' | 'neutral';
 
 export type EventStormingRow = {
@@ -18,6 +18,30 @@ export type EventStormingRow = {
   sourceTouchPoint?: string;
 };
 
+export type RecognizedFlow = {
+  name: string;
+  description: string;
+  stages: string[];
+  actors: string[];
+  services: string[];
+  confidence: number;
+};
+
+export type FlowOccurrence = {
+  occurrenceKey: string;
+  flowName: string;
+  flowIndex: number;
+  stepIndex: number;
+  stage: string;
+  eventKey: string;
+  eventTitle: string;
+  actor: string;
+  service: string;
+  tags: string[];
+  queryHint: string;
+  sourceTouchPoint?: string;
+};
+
 export type CategorizedEvents = {
   problems: EventStormingRow[];
   normal: EventStormingRow[];
@@ -31,6 +55,7 @@ export type SloSuggestion = {
   target: string;
   rationale: string;
   sourceEventKeys: string[];
+  sourceOccurrenceKeys?: string[];
   queryHint: string;
 };
 
@@ -42,6 +67,7 @@ export type DashboardWidgetPlan = {
   stage: string;
   sectionType: DashboardSectionType;
   sourceEventKeys: string[];
+  sourceOccurrenceKeys?: string[];
   visualRole: DashboardVisualRole;
   palette: DashboardPalette;
   thresholdValue?: number;
@@ -69,6 +95,8 @@ export type EventBurstConfig = {
   burstCount: number;
   burstIntervalMs: number;
   copiesPerEvent: number;
+  randomizeEventCounts: boolean;
+  randomSeed: number;
 };
 
 export type DashboardPlan = {

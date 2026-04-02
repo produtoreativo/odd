@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "workflow": "tsx src/agents/workflow/index.ts",
+    "workflow": "tsx src/index.ts",
     "applier": "tsx src/agents/applier/index.ts",
     "check": "tsc -p tsconfig.json --noEmit"
   },

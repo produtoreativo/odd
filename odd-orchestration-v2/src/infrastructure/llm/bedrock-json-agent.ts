@@ -2,6 +2,9 @@ import { BedrockRuntimeClient, ConverseCommand, Message } from '@aws-sdk/client-
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 export type JsonSchema = Record<string, unknown>;
+type BedrockJsonAgentOptions = {
+  maxTokens?: number;
+};
 
 export class BedrockJsonAgent {
   private readonly client = new BedrockRuntimeClient({
@@ -11,7 +14,7 @@ export class BedrockJsonAgent {
     })
   });
 
-  constructor(private readonly modelId: string) {}
+  constructor(private readonly modelId: string, private readonly options: BedrockJsonAgentOptions = {}) {}
 
   async call(systemPrompt: string, userPrompt: string, _schema: JsonSchema): Promise<unknown> {
     const rawText = await this.callRawText(systemPrompt, userPrompt);
@@ -31,7 +34,10 @@ export class BedrockJsonAgent {
   async callRawText(systemPrompt: string, userPrompt: string): Promise<string> {
     const response = await this.client.send(new ConverseCommand({
       modelId: this.modelId,
-      inferenceConfig: { temperature: 0 },
+      inferenceConfig: {
+        temperature: 0,
+        ...(typeof this.options.maxTokens === 'number' ? { maxTokens: this.options.maxTokens } : {})
+      },
       system: [{ text: systemPrompt }],
       messages: [{
         role: 'user',

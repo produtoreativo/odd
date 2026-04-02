@@ -320,6 +320,10 @@ function buildHeroTile(
   return GRID.heroHeight + GRID.sectionGap;
 }
 
+function isHeroBand(band: DashboardBandPlan): boolean {
+  return band.widgets.some((widget) => widget.visualRole === 'hero_alert');
+}
+
 function buildBandTiles(
   document: DynatraceDashboardDocument,
   startingId: number,
@@ -346,7 +350,7 @@ function buildBandTiles(
     return { nextId: id + 1, nextTop: contentTop + height + GRID.sectionGap };
   }
 
-  const columns = Math.max(1, Math.min(3, widgets.length));
+  const columns = Math.max(1, widgets.length);
   const rows = Math.ceil(widgets.length / columns);
 
   widgets.forEach((widget, index) => {
@@ -375,8 +379,6 @@ function buildBandTiles(
 }
 
 function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboardDocument {
-  const [heroBand, failureKpis, failureTrends, successKpis, successTrends] = plan.bands;
-
   const document: DynatraceDashboardDocument = {
     version: 21,
     variables: [],
@@ -388,24 +390,22 @@ function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboar
   };
 
   let nextId = 0;
-  let top = buildHeroTile(document, nextId, heroBand);
-  nextId += 1;
+  let top = 0;
 
-  const failureKpisResult = buildBandTiles(document, nextId, failureKpis, 'Falhas por evento', top, GRID.rowHeight);
-  nextId = failureKpisResult.nextId;
-  top = failureKpisResult.nextTop;
+  for (const band of plan.bands) {
+    if (isHeroBand(band)) {
+      top = buildHeroTile(document, nextId, band);
+      nextId += 1;
+      continue;
+    }
 
-  const failureTrendsResult = buildBandTiles(document, nextId, failureTrends, 'Falhas por etapa', top, GRID.trendHeight);
-  nextId = failureTrendsResult.nextId;
-  top = failureTrendsResult.nextTop;
-
-  const successKpisResult = buildBandTiles(document, nextId, successKpis, 'Sucessos por evento', top, GRID.rowHeight);
-  nextId = successKpisResult.nextId;
-  top = successKpisResult.nextTop;
-
-  const successTrendsResult = buildBandTiles(document, nextId, successTrends, 'Sucessos por etapa', top, GRID.trendHeight);
-  nextId = successTrendsResult.nextId;
-  top = successTrendsResult.nextTop;
+    const bandHeight = band.widgets.some((widget) => widget.widgetType === 'timeseries')
+      ? GRID.trendHeight
+      : GRID.rowHeight;
+    const bandResult = buildBandTiles(document, nextId, band, band.title, top, bandHeight);
+    nextId = bandResult.nextId;
+    top = bandResult.nextTop;
+  }
 
   void nextId;
   void top;

@@ -78,7 +78,8 @@ npm run workflow -- \
   --provider datadog \
   --burst-count 6 \
   --burst-interval-ms 10000 \
-  --copies-per-event 4
+  --copies-per-event 4 \
+  --randomize-event-counts
 ```
 
 Providers suportados no workflow:
@@ -109,7 +110,8 @@ npm run workflow -- \
   --provider datadog \
   --burst-count 6 \
   --burst-interval-ms 10000 \
-  --copies-per-event 4
+  --copies-per-event 4 \
+  --randomize-event-counts
 ```
 
 ## Execução Parcial
@@ -203,7 +205,8 @@ npm run workflow -- \
   --end-at apply \
   --burst-count 12 \
   --burst-interval-ms 5000 \
-  --copies-per-event 3
+  --copies-per-event 3 \
+  --randomize-event-counts
 ```
 
 Arquivos auxiliares suportados na retomada:
@@ -287,7 +290,8 @@ npm run applier -- \
   --dry-run \
   --burst-count 6 \
   --burst-interval-ms 10000 \
-  --copies-per-event 4
+  --copies-per-event 4 \
+  --randomize-event-counts
 ```
 
 Execução real:
@@ -298,7 +302,8 @@ npm run applier -- \
   --dashboard-key "payments-acompanhamento" \
   --burst-count 6 \
   --burst-interval-ms 10000 \
-  --copies-per-event 4
+  --copies-per-event 4 \
+  --randomize-event-counts
 ```
 
 Se quiser sobrescrever o workspace resolvido automaticamente, ainda pode usar `--terraform-dir`.
@@ -308,6 +313,7 @@ Parâmetros opcionais da simulação de rajadas:
 - `--burst-count`: quantas rajadas enviar
 - `--burst-interval-ms`: tempo de espera entre uma rajada e a próxima
 - `--copies-per-event`: quantas cópias de cada evento enviar dentro de cada rajada
+- `--randomize-event-counts`: quando presente, a quantidade enviada por evento em cada rajada passa a ser randômica; o teto usado é `--copies-per-event` e, se ele não for informado, o padrão passa a ser `5`
 
 Esses parâmetros são úteis para simular padrões mais próximos dos SLOs do fluxo, por exemplo volume recorrente, janelas de pico e repetição de eventos de sucesso ou falha ao longo do tempo.
 

@@ -129,10 +129,13 @@ export async function applyDatadog(args: {
 }
 
 function resolveBurstArgs(args: Record<string, string | boolean>): Partial<EventBurstConfig> {
+  const randomizeEventCounts = args['randomize-event-counts'] === true;
   return {
     burstCount: parseOptionalIntegerArg(args, 'burst-count'),
     burstIntervalMs: parseOptionalIntegerArg(args, 'burst-interval-ms'),
-    copiesPerEvent: parseOptionalIntegerArg(args, 'copies-per-event')
+    copiesPerEvent: parseOptionalIntegerArg(args, 'copies-per-event'),
+    randomizeEventCounts,
+    randomSeed: randomizeEventCounts ? Date.now() : undefined
   };
 }
 
