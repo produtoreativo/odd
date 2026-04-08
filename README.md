@@ -1,379 +1,333 @@
-# odd — Observability Driven Design
+# odd
 
-> Transformando intenções de produto em requisitos estruturados e dashboards operacionais através de agentes de IA.
+Repositório com dois projetos ativos:
 
-## Status do projeto
+- `event-storming`: transforma imagens de event storming em contexto estruturado
+- `odd-orchestration-v2`: transforma o contexto estruturado em plano de observabilidade, Terraform e aplicação nos providers
 
-O ecossistema **odd** ainda está em construção.
+Hoje, o fluxo recomendado do repositório é:
 
-- **odd-orchestrator** — **Release Candidate (RC)**. É o componente mais maduro hoje e já cobre o fluxo de Event Storming para plano de dashboard, geração de Terraform e aplicação no Datadog.
-  Hoje também já possui suporte funcional para Dynatrace e Grafana Cloud, embora o caminho Datadog ainda seja o mais maduro.
-- **Demais agentes e pipeline multi-agente** — **em construção**. As peças fora do orchestrator ainda estão evoluindo em arquitetura, contratos e integração end-to-end.
+1. processar a imagem no `event-storming/bedrock`
+2. usar o `03-standardized-context.json` como entrada do `odd-orchestration-v2`
 
-Se você quer avaliar o projeto agora, o ponto de entrada recomendado é o diretório `odd-orchestrator/`.
+## Estrutura
 
-## O que é o odd?
-
-O **odd** é um sistema de engenharia de requisitos e observabilidade orientado por IA, construído sobre o conceito de **Observability Driven Design (ODD)** — a ideia de que a observabilidade não é algo que se adiciona depois, mas sim parte fundamental do design desde o primeiro momento.
-
-Na prática, isso significa que quando você descreve a intenção de um produto, o odd não gera apenas requisitos e user stories — ele também produz os eventos de domínio e os dashboards que vão permitir observar o sistema em produção. O resultado é uma ponte direta entre o que o produto **faz** e o que a operação **enxerga**.
-
-## O problema
-
-No ciclo tradicional de desenvolvimento, existe um gap enorme entre o que o time de produto imagina e o que a engenharia entrega em termos de observabilidade:
-
-1. **Requisitos são escritos manualmente** — propensos a inconsistências, lacunas e ambiguidades
-2. **Event Storming vive em post-its** — se perde depois do workshop
-3. **Dashboards são criados ad-hoc** — desconectados dos eventos de domínio
-4. **Observabilidade é um afterthought** — adicionada quando já está em produção e algo quebrou
-
-O odd resolve isso com um pipeline automatizado que conecta essas etapas usando orquestração multi-agente com LLMs.
-
-## Visão geral
-
-```
-                          O PIPELINE ODD
-                          ═════════════
-
-  ┌─────────────────┐
-  │  Intenção do     │  intention.md + context.json
-  │  Produto         │  (o que o produto deve fazer)
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  🤖 Gertrudes    │  Agente de requisitos (RAG + LLM)
-  │                  │  Gera: requisitos, glossário,
-  │                  │  premissas, requisitos não-funcionais
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  🤖 Corrinha     │  Agente de user stories [PLANEJADO]
-  │                  │  Converte requisitos em histórias
-  │                  │  de usuário e contratos de API
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  🤖 Creuza       │  Agente de Event Storming [PLANEJADO]
-  │                  │  Gera planilha de Event Storming
-  │                  │  a partir dos requisitos
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  📋 Planner      │  Lê Event Storming (XLSX/CSV)
-  │                  │  Categoriza eventos (sucesso/falha)
-  │                  │  Gera plano do dashboard + Terraform
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  🚀 Applier      │  Executa terraform apply
-  │                  │  Ingere eventos sintéticos
-  │                  │  no Datadog, Dynatrace ou Grafana
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  📊 Dashboard    │  Dashboard operacional em
-  │  Datadog/DT/GF   │  Datadog, Dynatrace ou Grafana
-  │                  │  com eventos e KPIs por fluxo
-  └─────────────────┘
+```txt
+event-storming/
+  bedrock/   # workflow multimodal com Amazon Bedrock
+  foss/      # variante local/alternativa
+odd-orchestration-v2/
+  src/
+  generated/
+  terraform/
+  terraform-dynatrace/
+  terraform-grafana/
 ```
 
-## Componentes
+## Pré-requisitos
 
-### odd-orchestrator (TypeScript/Node.js) — Release Candidate
+- Node.js 20+
+- npm 10+
+- Terraform 1.5+
+- credenciais AWS com acesso ao Bedrock, se for usar `event-storming/bedrock`
+- credenciais do provider de observabilidade que você quer aplicar no `odd-orchestration-v2`
 
-Responsável por transformar planilhas de Event Storming em dashboards via Terraform para Datadog, Dynatrace e Grafana Cloud.
+## Instalação
 
-- **Planner** — Lê arquivos XLSX/CSV de Event Storming, categoriza eventos em "problemas" (erros, falhas, rejeições) e "normais" (sucessos, aprovações), e gera o plano do dashboard junto com o código Terraform
-- **Applier** — Executa `terraform plan/apply` para criar o dashboard no provider selecionado e ingere eventos customizados sintéticos para popular os painéis
-
-Cada prompt do Planner pode usar um modelo de LLM diferente (Ollama local, OpenAI ou Anthropic Claude).
-
-### tools (Python/Docker) — Em construção
-
-Pipeline multi-agente para geração de requisitos usando RAG (Retrieval-Augmented Generation).
-
-- **Gertrudes** — O primeiro agente do pipeline. Recebe a intenção do produto, consulta uma base de conhecimento vetorial (Qdrant) em duas etapas (coarse → fine), e gera requisitos estruturados com validação de domínio e contratos de qualidade. Inclui ciclos de auto-revisão e reparo
-- **Airflow DAGs** — Orquestram a execução do pipeline, descobrindo produtos automaticamente e disparando os agentes
-- **Infraestrutura** — Stack Docker Compose com Airflow, PostgreSQL, Redis, Qdrant e Ollama
-
-#### O processo da Gertrudes em detalhe
-
-1. Recebe `intention.md` (descrição do produto) e `context.json` (metadados)
-2. Busca evidências relevantes na base de conhecimento via RAG de duas etapas
-3. Gera um resumo de domínio
-4. Produz requisitos em primeira passada
-5. Faz auto-revisão contra uma rubrica de qualidade
-6. Repara aderência ao domínio (termos obrigatórios, termos proibidos)
-7. Valida contratos de saída (estrutura dos arquivos, seções obrigatórias)
-8. Escreve os artefatos finais + logs de debug
-
-## Stack tecnológico
-
-| Camada | Tecnologias |
-|--------|-------------|
-| Modelos LLM | Ollama (local), Anthropic Claude, OpenAI GPT-4 |
-| Embeddings | nomic-embed-text via Ollama |
-| Banco vetorial | Qdrant |
-| Orquestração | Apache Airflow + Celery |
-| Dashboards | Datadog, Dynatrace, Grafana Cloud + Terraform (IaC) |
-| Linguagens | TypeScript (orchestrator), Python (agentes) |
-| Infraestrutura | Docker Compose, PostgreSQL, Redis |
-
-## Estado atual e roadmap
-
-### Maturidade atual
-
-- **Release Candidate**
-  - `odd-orchestrator`
-- **Em construção**
-  - `tools/`
-  - Gertrudes como produto operacional dentro do pipeline maior
-  - Corrinha
-  - Creuza
-  - Integração completa entre todos os agentes
-
-### Pronto
-
-- **Gertrudes** — Geração completa de requisitos com RAG, múltiplas passadas, validação de domínio e contratos de qualidade
-- **Planner** — Leitura de Event Storming, categorização de eventos por sucesso/falha, geração de planos e Terraform
-- **Applier** — Execução de Terraform e ingestão de eventos no Datadog, Dynatrace e Grafana Cloud
-- **Abstração de LLM** — Suporte a Ollama, OpenAI e Anthropic com seleção por prompt
-- **Infraestrutura** — Stack completa com Airflow, Qdrant e Ollama via Docker Compose
-
-### Planejado
-
-- **Corrinha** — Agente que converte requisitos em user stories, casos de uso e contratos de API
-- **Creuza** — Agente que gera Event Storming automaticamente a partir dos requisitos
-- **Pipeline end-to-end** — Integração completa desde a intenção do produto até o dashboard no Datadog/Dynatrace/Grafana, sem intervenção manual
-- **Base de conhecimento expandida** — Indexação de livros clássicos de engenharia de requisitos e software (Mastering the Requirements Process, Software Requirements, SWEBOK)
-
-### A visão completa
-
-Quando todos os agentes estiverem conectados, o fluxo será:
-
-> Você descreve o que o produto deve fazer → o odd gera os requisitos, as user stories, os eventos de domínio, o dashboard de observabilidade e o código Terraform — tudo validado, estruturado e pronto para deploy.
-
-O objetivo é que a distância entre a intenção e a observabilidade seja zero.
-
-## Como executar
-
-### odd-orchestrator
-
-O `odd-orchestrator` é hoje o ponto de entrada recomendado do repositório. Ele já suporta:
-
-- geração de dashboard para `datadog`
-- geração de dashboard para `dynatrace`
-- geração de dashboard para `grafana` (Grafana Cloud)
-- ingestão de eventos sintéticos nos três providers
-- execução ponta a ponta via `pipeline.sh`
-
-#### Instalação
+### event-storming/bedrock
 
 ```bash
-cd odd-orchestrator
+cd event-storming/bedrock
 npm install
-npm run build
+npm run check
 ```
 
-#### Configuração de ambiente
+### odd-orchestration-v2
 
-Crie `.env` a partir de `.env.example`.
+```bash
+cd odd-orchestration-v2
+npm install
+npm run check
+```
 
-Exemplo mínimo:
+## Ambiente
+
+### event-storming/bedrock
+
+Arquivo: `event-storming/bedrock/.env`
+
+Variáveis mínimas:
 
 ```dotenv
-DD_API_KEY=XXXXXX
-DD_APP_KEY=XXXXXX
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=... # opcional
+AWS_REGION=us-east-1
+
+BEDROCK_REQUEST_TIMEOUT_MS=3600000
+
+EVENT_STORMING_DEFAULT_MODEL=amazon.nova-lite-v1:0
+EVENT_STORMING_OBSERVE_MODEL=amazon.nova-pro-v1:0
+EVENT_STORMING_EXTRACT_MODEL=amazon.nova-lite-v1:0
+EVENT_STORMING_NORMALIZE_MODEL=amazon.nova-lite-v1:0
+```
+
+### odd-orchestration-v2
+
+Arquivo: `odd-orchestration-v2/.env`
+
+Variáveis mínimas para geração com Bedrock:
+
+```dotenv
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=... # opcional
+AWS_REGION=us-east-1
+
+BEDROCK_REQUEST_TIMEOUT_MS=3600000
+
+ODD_ORCHESTRATION_MODEL=amazon.nova-lite-v1:0
+ODD_ORCHESTRATION_CATEGORIZE_MODEL=amazon.nova-lite-v1:0
+ODD_ORCHESTRATION_SLO_MODEL=amazon.nova-lite-v1:0
+ODD_ORCHESTRATION_PLAN_MODEL=amazon.nova-lite-v1:0
+```
+
+Variáveis por provider:
+
+Datadog:
+
+```dotenv
+DD_API_KEY=...
+DD_APP_KEY=...
 DD_SITE=datadoghq.com
 DD_API_BASE_URL=https://api.datadoghq.com
 DD_EVENT_BATCH_SIZE=10
+```
 
-OLLAMA_ENABLED=true
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5-coder:14b
+Dynatrace:
 
+```dotenv
 DYNATRACE_ENV_URL=https://SEU-AMBIENTE.live.dynatrace.com
-DYNATRACE_API_TOKEN=xxxxxx
-DYNATRACE_PLATFORM_TOKEN=xxxxxx
+DYNATRACE_API_TOKEN=...
+DYNATRACE_PLATFORM_TOKEN=...
+DYNATRACE_ENTITY_SELECTOR=...     # opcional
+DYNATRACE_MANAGEMENT_ZONE=...     # opcional
 DYNATRACE_EVENT_TIMEOUT_MINUTES=15
-
-GRAFANA_URL=https://your-stack.grafana.net
-GRAFANA_AUTH=glsa_xxxxxxxxxxxxxxxxxxxx
-GRAFANA_METRICS_URL=https://prometheus-prod-XX-prod-REGION-0.grafana.net
-GRAFANA_METRICS_USER=000000
-GRAFANA_METRICS_TOKEN=glc_xxxxxxxxxxxxxxxxxxxx
 ```
 
-Observações:
+Grafana:
 
-- `DYNATRACE_API_TOKEN` é usado para ingestão em `/api/v2/events/ingest`
-- `DYNATRACE_PLATFORM_TOKEN` é usado pelo provider Terraform ao criar dashboards novos via `dynatrace_document`
-- `GRAFANA_AUTH` (service account token `glsa_...`) é usado pelo provider Terraform para criação de dashboards
-- `GRAFANA_METRICS_TOKEN` (Cloud Access Policy token `glc_...`) é usado para push de métricas Prometheus via InfluxDB line protocol
-- `OLLAMA_BASE_URL` deve preferencialmente usar `127.0.0.1`, não `localhost`
-
-#### Pipeline ponta a ponta
-
-Uso:
-
-```bash
-./pipeline.sh [datadog|dynatrace|grafana] [planilha.xlsx|planilha.csv] [dashboard-title]
+```dotenv
+GRAFANA_URL=...
+GRAFANA_AUTH=...
+GRAFANA_METRICS_URL=...
+GRAFANA_METRICS_USER=...
+GRAFANA_METRICS_TOKEN=...
 ```
 
-Exemplos:
+## Como executar
+
+### 1. Gerar contexto estruturado a partir da imagem
+
+No `event-storming/bedrock`:
 
 ```bash
-./pipeline.sh
-./pipeline.sh datadog
-./pipeline.sh datadog ./samples/event-storming.xlsx "Meu Dashboard"
-./pipeline.sh dynatrace ./samples/value_stream_confirmacao_pagamento_completa.xlsx "PagamentoCompleto"
-./pipeline.sh grafana ./samples/event-storming.xlsx "Meu Dashboard Grafana"
+cd event-storming/bedrock
+
+npm run start -- \
+  --input-image samples/ODD-Payments-EventStorming.png \
+  --output-dir ./generated/payments \
+  --env dev \
+  --provider bedrock
 ```
 
-Comportamento atual do script:
+Saídas principais:
 
-- carrega o `.env`
-- valida a saúde do Ollama
-- executa o `planner`
-- descobre o diretório de saída em `generated/...`
-- executa o `applier` com o provider selecionado
+- `01-image-observation.json`
+- `02-candidate-events.json`
+- `03-standardized-context.json`
+- `04-workbook.json`
+- `recognized-event-storming.xlsx`
 
-#### Execução manual
+Retomadas suportadas:
 
-Planner Datadog:
+Do `extract`:
 
 ```bash
-npm run planner -- \
-  --input ./samples/event-storming.xlsx \
-  --dashboard-title "Meu Dashboard" \
+npm run start -- \
+  --input-image samples/ODD-Payments-EventStorming.png \
+  --output-dir ./generated/payments \
+  --provider bedrock \
+  --start-from extract \
+  --image-observation ./generated/payments/01-image-observation.json
+```
+
+Do `normalize`:
+
+```bash
+npm run start -- \
+  --input-image samples/ODD-Payments-EventStorming.png \
+  --output-dir ./generated/payments \
+  --provider bedrock \
+  --start-from normalize \
+  --candidate-context ./generated/payments/02-candidate-events.json
+```
+
+### 2. Gerar e aplicar observabilidade
+
+No `odd-orchestration-v2`:
+
+Exemplo completo com o contexto gerado pelo `event-storming/bedrock`:
+
+```bash
+cd odd-orchestration-v2
+
+npm run workflow -- \
+  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
+  --dashboard-title "ODD - Payments - v4" \
+  --dashboard-key "payments-acompanhamento-v4" \
+  --env dev \
   --provider datadog
 ```
 
-Planner Dynatrace:
+Providers suportados:
+
+- `datadog`
+- `dynatrace`
+- `grafana`
+
+Exemplo completo para Dynatrace:
 
 ```bash
-npm run planner -- \
-  --input ./samples/event-storming.xlsx \
-  --dashboard-title "Meu Dashboard" \
-  --provider dynatrace
+cd odd-orchestration-v2
+
+npm run workflow -- \
+  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
+  --dashboard-title "ODD - Payments - Dynatrace" \
+  --dashboard-key "payments-acompanhamento-dynatrace" \
+  --env dev \
+  --provider dynatrace \
+  --end-at apply
 ```
 
-Applier Datadog:
+Exemplo completo para Datadog com rajadas:
 
 ```bash
-npm run applier -- \
-  --terraform-dir ./terraform \
-  --events-file ./generated/<run>/custom-events.json \
-  --provider datadog
-```
+cd odd-orchestration-v2
 
-Applier Dynatrace:
-
-```bash
-npm run applier -- \
-  --terraform-dir ./terraform-dynatrace \
-  --events-file ./generated/<run>/custom-events.json \
-  --provider dynatrace
-```
-
-Planner Grafana:
-
-```bash
-npm run planner -- \
-  --input ./samples/event-storming.xlsx \
-  --dashboard-title "Meu Dashboard" \
-  --provider grafana
-```
-
-Applier Grafana:
-
-```bash
-npm run applier -- \
-  --terraform-dir ./terraform-grafana \
-  --events-file ./generated/<run>/custom-events.json \
-  --provider grafana
-```
-
-Dry run:
-
-```bash
-npm run applier -- \
-  --terraform-dir ./terraform \
-  --events-file ./generated/<run>/custom-events.json \
+npm run workflow -- \
+  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
+  --dashboard-title "ODD - Payments - v4" \
+  --dashboard-key "payments-acompanhamento-v4" \
+  --env dev \
   --provider datadog \
-  --dry-run
+  --burst-count 6 \
+  --burst-interval-ms 10000 \
+  --copies-per-event 4 \
+  --randomize-event-counts
 ```
 
-#### Providers e maturidade
+## odd-orchestration-v2 em detalhes
 
-- `datadog`: caminho mais maduro hoje
-- `dynatrace`: já cria dashboard nova, aplica Terraform e ingere eventos, mas ainda está evoluindo na paridade visual com o Datadog
-- `grafana`: cria dashboard no Grafana Cloud via Terraform e ingere métricas via Prometheus (InfluxDB line protocol). Compatível com o free tier do Grafana Cloud
-
-### Stack Docker (Gertrudes + infra)
+### Scripts
 
 ```bash
-cd tools/iac
-docker-compose up -d
-
-# Executar Gertrudes manualmente
-docker-compose exec airflow-scheduler python /opt/scripts/agents/gertrudes_run.py \
-  --product schola --root /opt/products --force
+npm run workflow
+npm run applier
+npm run check
 ```
 
-## Formato de entrada — Event Storming
+### Etapas do workflow
 
-O Planner espera planilhas XLSX ou CSV com as seguintes colunas:
+1. `input`
+2. `categorize`
+3. `slos`
+4. `plan`
+5. `terraform`
+6. `slo_terraform`
+7. `apply`
 
-| Coluna | Descrição |
-|--------|-----------|
-| `ordem` | Número de sequência do evento |
-| `event_key` | Identificador único (ex: `analyst_entry_approved`) |
-| `event_title` | Título legível do evento |
-| `stage` | Etapa do processo (ex: `triagem`, `solicitacao`, `execucao`) |
-| `actor` | Quem dispara ou trata o evento |
-| `service` | Serviço responsável |
-| `tags` | Metadados separados por vírgula (ex: `journey:inspection,domain:risk`) |
-| `dashboard_widget` | Tipo de widget de origem: `event_stream`, `note`, `query_value` ou `timeseries` |
-| `query_hint` | Template de query para o Datadog |
+### Execução parcial
 
-Veja exemplos em `odd-orchestrator/samples/`.
+Parar no `plan`:
 
-## Artefatos gerados
+```bash
+npm run workflow -- \
+  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
+  --dashboard-title "ODD - Payments - v4" \
+  --dashboard-key "payments-acompanhamento-v4" \
+  --provider datadog \
+  --end-at plan
+```
 
-### Pelo Planner
-- `generated/<inputName>_<timestamp>/plan.json` — Estrutura do dashboard em bandas visuais fixas (hero, KPIs e tendências)
-- `generated/<inputName>_<timestamp>/custom-events.json` — Eventos sintéticos para Datadog ou Dynatrace
-- `terraform/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Datadog
-- `terraform-dynatrace/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Dynatrace
-- `terraform-grafana/generated/<inputName>-dashboard.auto.tf.json` — Código Terraform para Grafana Cloud
+Executar só `terraform` a partir de um `plan.json`:
 
-### Pelo Applier
-- `generated/apply-report.json` — Relatório de sucesso/falha da aplicação
+```bash
+npm run workflow -- \
+  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
+  --dashboard-key "<dashboard-key>" \
+  --provider datadog \
+  --start-from terraform \
+  --end-at terraform
+```
 
-### Pela Gertrudes
-- `products/{produto}/1-requirements/requirements.md` — Requisitos funcionais (RF-001, RF-002, ...)
-- `products/{produto}/1-requirements/non_functional.md` — Requisitos não-funcionais
-- `products/{produto}/1-requirements/glossary.md` — Glossário do domínio
-- `products/{produto}/1-requirements/assumptions.md` — Premissas (AS-001, AS-002, ...)
-- `products/{produto}/1-requirements/domain_summary.md` — Resumo do domínio
-- `products/{produto}/1-requirements/handoff_to_corrinha.md` — Instruções para o próximo agente
+Executar só `apply` a partir de um `plan.json`:
 
-## Variáveis de ambiente
+```bash
+npm run workflow -- \
+  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
+  --dashboard-key "<dashboard-key>" \
+  --provider dynatrace \
+  --start-from apply \
+  --end-at apply
+```
 
-| Variável | Componente | Uso |
-|----------|------------|-----|
-| `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE` | Applier | Autenticação no Datadog |
-| `DYNATRACE_ENV_URL`, `DYNATRACE_API_TOKEN` | Applier | Ingestão de eventos no Dynatrace |
-| `DYNATRACE_PLATFORM_TOKEN` | Terraform Dynatrace | Criação de dashboards novas via `dynatrace_document` |
-| `GRAFANA_URL`, `GRAFANA_AUTH` | Terraform Grafana | URL do stack e service account token (`glsa_...`) para criação de dashboards |
-| `GRAFANA_METRICS_URL`, `GRAFANA_METRICS_USER` | Applier | Endpoint e usuário para push de métricas Prometheus |
-| `GRAFANA_METRICS_TOKEN` | Applier | Cloud Access Policy token (`glc_...`) para push de métricas |
-| `OLLAMA_ENABLED`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Planner | LLM local para categorização e suporte ao planner |
-| `CHUNK_SIZE`, `CHUNK_OVERLAP` | Airflow | Configuração de chunking para indexação RAG |
+### Saídas do odd-orchestration-v2
+
+Por execução:
+
+- `generated/<dashboard-key>/<run-id>/`
+
+Arquivos principais:
+
+- `rows.json`
+- `categorized-events.json`
+- `slo-suggestions.json`
+- `plan.json`
+- `custom-events.json`
+- `<provider>-dashboard.auto.tf.json`
+- `<provider>-slos.auto.tf.json` quando houver
+- `<provider>-bundle.auto.tf.json`
+- `dashboard-metadata.json`
+- `apply-report.json` quando `apply` for executado
+
+Workspace Terraform isolado:
+
+- `generated/terraform-workspaces/<provider>/<dashboard-key>/`
+
+## Fluxo recomendado
+
+```bash
+cd event-storming/bedrock
+npm install
+npm run start -- \
+  --input-image samples/ODD-Payments-EventStorming.png \
+  --output-dir ./generated/payments \
+  --env dev \
+  --provider bedrock
+
+cd ../../odd-orchestration-v2
+npm install
+npm run workflow -- \
+  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
+  --dashboard-title "ODD - Payments - v4" \
+  --dashboard-key "payments-acompanhamento-v4" \
+  --env dev \
+  --provider datadog
+```
+
+## Observações
+
+- O `event-storming/foss` existe no repositório, mas o caminho principal hoje continua sendo `event-storming/bedrock`.
+- O `odd-orchestration-v2` é o orchestrator ativo do repo.
+- O `odd-orchestrator` legado não é mais o ponto de entrada recomendado deste README.
