@@ -90,7 +90,7 @@ Providers suportados no workflow:
 
 ## Execução Completa
 
-Sem parâmetros extras de etapa, o comando executa tudo:
+Sem `--end-at`, o comando executa tudo para qualquer provider suportado:
 
 - `input`
 - `categorize`

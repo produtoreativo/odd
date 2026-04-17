@@ -8,8 +8,8 @@ async function main(): Promise<void> {
   loadDotEnv();
 
   const rawArgs = parseArgs(process.argv.slice(2));
-  const provider = parseProvider(rawArgs.provider);
-  const args = parseWorkflowCliArgs(rawArgs, provider === 'datadog' ? 'apply' : 'terraform');
+  parseProvider(rawArgs.provider);
+  const args = parseWorkflowCliArgs(rawArgs, 'apply');
 
   await runObservabilityWorkflow(args);
 }

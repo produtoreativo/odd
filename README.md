@@ -56,6 +56,8 @@ npm run check
 
 Arquivo: `event-storming/bedrock/.env`
 
+`LANGSMITH_API_KEY` é opcional. Sem essa variável, o workflow continua funcionando, apenas sem tracing no LangSmith.
+
 Variáveis mínimas:
 
 ```dotenv
@@ -75,6 +77,8 @@ EVENT_STORMING_NORMALIZE_MODEL=amazon.nova-lite-v1:0
 ### odd-orchestration-v2
 
 Arquivo: `odd-orchestration-v2/.env`
+
+`LANGSMITH_API_KEY` não é necessária para a execução atual do `odd-orchestration-v2`.
 
 Variáveis mínimas para geração com Bedrock:
 
