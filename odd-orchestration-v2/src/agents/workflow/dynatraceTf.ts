@@ -1,3 +1,4 @@
+import { shouldApplyDynatraceDocumentDashboard } from '../../shared/dynatrace-options.js';
 import { DashboardBandPlan, DashboardPalette, DashboardPlan, DashboardWidgetPlan } from '../../shared/types.js';
 
 type DynatraceMarkdownTile = {
@@ -256,14 +257,14 @@ function lineChartTile(title: string, query: string, palette: DashboardPalette):
 function eventFilter(widget: DashboardWidgetPlan): string {
   const names = widget.sourceEventKeys;
   return names
-    .map((name) => `(event.name == "${name}" or title == "${name}")`)
+    .map((name) => `event.type == "${name}"`)
     .join(' or ');
 }
 
 function dqlForSingleValue(widget: DashboardWidgetPlan): string {
   const filters = eventFilter(widget);
   return [
-    'fetch events',
+    'fetch bizevents',
     `| filter ${filters}`,
     '| summarize count = count()'
   ].join('\n');
@@ -272,7 +273,7 @@ function dqlForSingleValue(widget: DashboardWidgetPlan): string {
 function dqlForTimeseries(widget: DashboardWidgetPlan): string {
   const filters = eventFilter(widget);
   return [
-    'fetch events',
+    'fetch bizevents',
     `| filter ${filters}`,
     '| makeTimeseries count = count(default: 0), interval: 5m'
   ].join('\n');
@@ -414,6 +415,10 @@ function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboar
 }
 
 export async function buildDynatraceDashboardTerraform(plan: DashboardPlan, dashboardKey: string): Promise<Record<string, unknown>> {
+  if (!shouldApplyDynatraceDocumentDashboard()) {
+    return {};
+  }
+
   const document = buildDynatraceDashboardDocument(plan);
   const name = resourceName(dashboardKey);
 

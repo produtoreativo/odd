@@ -63,7 +63,21 @@ function terraformEnv(provider: ObservabilityProvider): NodeJS.ProcessEnv {
     hasDynatracePlatformToken: Boolean(env.DYNATRACE_PLATFORM_TOKEN)
   });
 
+  if (provider === 'dynatrace') {
+    validateDynatracePlatformToken(env.DYNATRACE_PLATFORM_TOKEN);
+  }
+
   return env;
+}
+
+function validateDynatracePlatformToken(token: string | undefined): void {
+  if (!token) {
+    throw new Error('DYNATRACE_PLATFORM_TOKEN e obrigatorio para aplicar dashboards Dynatrace via dynatrace_document.');
+  }
+
+  if (!token.startsWith('eyJ')) {
+    throw new Error('DYNATRACE_PLATFORM_TOKEN precisa ser um token OAuth/JWT da Dynatrace Platform. O valor atual parece um API token dt0*, que causa erro 401 "Could not parse JWT" na API de documentos.');
+  }
 }
 
 function exec(command: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {

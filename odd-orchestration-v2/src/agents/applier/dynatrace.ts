@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import { CustomEventPayload } from '../../shared/types.js';
 
@@ -8,35 +10,23 @@ export type DynatraceEventIngestionResult = {
   error?: string;
 };
 
-type DynatraceEventIngest = {
-  eventType: 'ERROR_EVENT' | 'CUSTOM_INFO';
-  title: string;
-  timeout: number;
-  entitySelector?: string;
-  properties: Record<string, string>;
+type DynatraceBizEventIngest = Record<string, string | number | boolean>;
+
+type DynatraceAuth = {
+  header: string;
+  source: string;
+};
+
+type DynatraceIngestionOptions = {
+  payloadFile?: string;
 };
 
 function tagValue(tags: string[], prefix: string): string | undefined {
   return tags.find((tag) => tag.startsWith(prefix))?.slice(prefix.length);
 }
 
-function escapeEntitySelectorLiteral(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
 function resolveManagementZone(event: CustomEventPayload): string | undefined {
   return tagValue(event.tags, 'dynatrace.management_zone:') ?? process.env.DYNATRACE_MANAGEMENT_ZONE;
-}
-
-function resolveEntitySelector(event: CustomEventPayload): string | undefined {
-  const explicitSelector = tagValue(event.tags, 'dynatrace.entity_selector:') ?? process.env.DYNATRACE_ENTITY_SELECTOR;
-  const managementZone = resolveManagementZone(event);
-
-  if (explicitSelector && managementZone && !explicitSelector.includes('mzName(')) {
-    return `${explicitSelector},mzName("${escapeEntitySelectorLiteral(managementZone)}")`;
-  }
-
-  return explicitSelector;
 }
 
 export async function readEvents(filePath: string): Promise<CustomEventPayload[]> {
@@ -44,95 +34,149 @@ export async function readEvents(filePath: string): Promise<CustomEventPayload[]
   return JSON.parse(content) as CustomEventPayload[];
 }
 
-export async function ingestEvents(filePath: string, dryRun: boolean): Promise<DynatraceEventIngestionResult[]> {
+export async function ingestEvents(
+  filePath: string,
+  dryRun: boolean,
+  options: DynatraceIngestionOptions = {}
+): Promise<DynatraceEventIngestionResult[]> {
   const events = await readEvents(filePath);
+  const payload = events.map(toDynatraceBizEventPayload);
+  if (options.payloadFile) {
+    await writeFile(options.payloadFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
+  }
 
   if (dryRun) {
     return events.map((event) => ({ title: event.title, status: 'dry-run' }));
   }
 
   const results: DynatraceEventIngestionResult[] = [];
-  for (const event of events) {
+  for (const batch of chunkEvents(payload, resolveBatchSize())) {
     try {
-      const response = await sendEvent(event);
-      results.push({ title: event.title, status: 'sent', response });
+      const response = await sendEventsBatch(batch);
+      results.push(...batch.map((event) => ({ title: String(event['event.type']), status: 'sent' as const, response })));
     } catch (error) {
-      results.push({
-        title: event.title,
-        status: 'failed',
+      results.push(...batch.map((event) => ({
+        title: String(event['event.type']),
+        status: 'failed' as const,
         error: error instanceof Error ? error.message : String(error)
-      });
+      })));
     }
   }
 
   return results;
 }
 
-function toProperties(event: CustomEventPayload): Record<string, string> {
-  const properties: Record<string, string> = {
-    'odd.title': event.title,
-    'odd.text': event.text
-  };
+function resolveBatchSize(): number {
+  const parsed = Number.parseInt(process.env.DYNATRACE_BIZEVENTS_BATCH_SIZE ?? '100', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+}
 
+function chunkEvents(events: DynatraceBizEventIngest[], batchSize: number): DynatraceBizEventIngest[][] {
+  const chunks: DynatraceBizEventIngest[][] = [];
+  for (let index = 0; index < events.length; index += batchSize) {
+    chunks.push(events.slice(index, index + batchSize));
+  }
+  return chunks;
+}
+
+function appendTagFields(payload: DynatraceBizEventIngest, event: CustomEventPayload): void {
   for (const tag of event.tags) {
     const [key, ...rest] = tag.split(':');
     if (!key || rest.length === 0) continue;
-    properties[`odd.tag.${key}`] = rest.join(':');
+    payload[`odd.tag.${key}`] = rest.join(':');
+  }
+}
+
+function toDynatraceBizEventPayload(event: CustomEventPayload): DynatraceBizEventIngest {
+  const isError = event.alert_type === 'error' || event.tags.includes('exception:true') || event.tags.includes('outcome:problem');
+  const provider = process.env.DYNATRACE_BIZEVENT_PROVIDER || 'odd-orchestration-v2';
+  const payload: DynatraceBizEventIngest = {
+    'event.id': randomUUID(),
+    'event.provider': provider,
+    'event.type': event.title,
+    title: event.title,
+    text: event.text,
+    'odd.alert_type': event.alert_type ?? (isError ? 'error' : 'info'),
+    'odd.is_error': isError,
+    'odd.source': 'odd'
+  };
+
+  if (event.priority) {
+    payload['odd.priority'] = event.priority;
+  }
+  if (event.aggregation_key) {
+    payload['odd.aggregation_key'] = event.aggregation_key;
+  }
+  if (event.source_type_name) {
+    payload['odd.source_type_name'] = event.source_type_name;
   }
 
   const managementZone = resolveManagementZone(event);
   if (managementZone) {
-    properties['odd.management_zone'] = managementZone;
+    payload['odd.management_zone'] = managementZone;
   }
 
-  for (const tag of event.tags) {
-    if (!tag.startsWith('dt.entity.')) continue;
-    const separator = tag.indexOf(':');
-    if (separator < 0) continue;
-    const key = tag.slice(0, separator);
-    const value = tag.slice(separator + 1);
-    if (value !== '') {
-      properties[key] = value;
-    }
+  appendTagFields(payload, event);
+  return payload;
+}
+
+function resolveAuth(): DynatraceAuth | undefined {
+  const apiToken = process.env.DYNATRACE_BIZEVENTS_TOKEN ?? process.env.DYNATRACE_API_TOKEN;
+  if (apiToken) {
+    return {
+      header: `Api-Token ${apiToken}`,
+      source: process.env.DYNATRACE_BIZEVENTS_TOKEN ? 'DYNATRACE_BIZEVENTS_TOKEN' : 'DYNATRACE_API_TOKEN'
+    };
   }
 
-  properties['dt.event.allow_davis_merge'] = event.alert_type === 'error' ? 'false' : 'true';
-  return properties;
+  const bearerToken = process.env.DYNATRACE_BIZEVENTS_BEARER_TOKEN ?? process.env.DYNATRACE_OAUTH_TOKEN;
+  if (bearerToken) {
+    return {
+      header: `Bearer ${bearerToken}`,
+      source: process.env.DYNATRACE_BIZEVENTS_BEARER_TOKEN ? 'DYNATRACE_BIZEVENTS_BEARER_TOKEN' : 'DYNATRACE_OAUTH_TOKEN'
+    };
+  }
+
+  return undefined;
 }
 
-function toDynatracePayload(event: CustomEventPayload): DynatraceEventIngest {
-  const isError = event.alert_type === 'error' || event.tags.includes('exception:true') || event.tags.includes('outcome:problem');
-  const timeout = Number.parseInt(process.env.DYNATRACE_EVENT_TIMEOUT_MINUTES ?? '15', 10);
-  return {
-    eventType: isError ? 'ERROR_EVENT' : 'CUSTOM_INFO',
-    title: event.title,
-    timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : 15,
-    entitySelector: resolveEntitySelector(event),
-    properties: toProperties(event)
-  };
+function buildDynatraceError(status: number, responseText: string, titles: string, authSource: string): Error {
+  const scopeHint = status === 403 && responseText.includes('bizevents.ingest')
+    ? ` O token em ${authSource} nao tem o scope "bizevents.ingest"; use um token especifico em DYNATRACE_BIZEVENTS_TOKEN ou DYNATRACE_BIZEVENTS_BEARER_TOKEN com esse scope.`
+    : '';
+  return new Error(`Erro ao enviar batch de Business Events para Dynatrace (${titles}): ${status} ${responseText}.${scopeHint}`);
 }
 
-async function sendEvent(event: CustomEventPayload): Promise<unknown> {
+async function sendEventsBatch(payload: DynatraceBizEventIngest[]): Promise<unknown> {
   const envUrl = process.env.DYNATRACE_ENV_URL;
-  const apiToken = process.env.DYNATRACE_API_TOKEN;
+  const auth = resolveAuth();
 
-  if (!envUrl || !apiToken) {
-    throw new Error('DYNATRACE_ENV_URL e DYNATRACE_API_TOKEN são obrigatórios para ingestão real no Dynatrace.');
+  if (!envUrl || !auth) {
+    throw new Error('DYNATRACE_ENV_URL e DYNATRACE_BIZEVENTS_TOKEN, DYNATRACE_BIZEVENTS_BEARER_TOKEN ou DYNATRACE_API_TOKEN sao obrigatorios para ingestao real de Business Events no Dynatrace.');
   }
 
-  const payload = toDynatracePayload(event);
-  const response = await fetch(`${envUrl.replace(/\/+$/, '')}/api/v2/events/ingest`, {
+  const endpoint = process.env.DYNATRACE_BIZEVENTS_INGEST_URL
+    ?? `${envUrl.replace(/\/+$/, '')}/api/v2/bizevents/ingest`;
+  console.info([
+    `================ DYNATRACE BIZEVENT BATCH PAYLOAD (${payload.length}) ================`,
+    JSON.stringify(payload, null, 2),
+    '===================================================================='
+  ].join('\n'));
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Api-Token ${apiToken}`
+      Authorization: auth.header
     },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    throw new Error(`Erro ao enviar evento ${event.title} para Dynatrace: ${response.status} ${await response.text()}`);
+    const titles = payload.map((event) => String(event['event.type'])).join(', ');
+    throw buildDynatraceError(response.status, await response.text(), titles, auth.source);
   }
 
-  return response.json();
+  const responseText = await response.text();
+  return responseText ? JSON.parse(responseText) : { status: response.status };
 }

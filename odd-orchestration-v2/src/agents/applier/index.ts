@@ -10,6 +10,7 @@ import { ingestEvents as ingestDynatraceEvents } from './dynatrace.js';
 import { runTerraform } from './terraform.js';
 import { ApplyReport, DatadogApplyReport, EventBurstConfig, TerraformApplyReport } from '../../shared/types.js';
 import { parseProvider } from '../../shared/provider.js';
+import { shouldApplyDynatraceDocumentDashboard } from '../../shared/dynatrace-options.js';
 
 const logger = new Logger('applier-entrypoint');
 
@@ -222,22 +223,29 @@ export async function applyDynatrace(args: {
   let terraformCommands: string[] = [];
   let terraformError: string | undefined;
 
-  try {
-    logger.info('Executando etapa terraform do applier', {
+  if (shouldApplyDynatraceDocumentDashboard()) {
+    try {
+      logger.info('Executando etapa terraform do applier', {
+        provider: 'dynatrace',
+        terraformDir: args.terraformDir,
+        dryRun: args.dryRun
+      });
+      terraformCommands = await runTerraform(args.terraformDir, args.dryRun, 'dynatrace');
+      logger.info('Etapa terraform do applier concluída', {
+        provider: 'dynatrace',
+        commands: terraformCommands
+      });
+    } catch (error) {
+      terraformError = error instanceof Error ? error.message : String(error);
+      logger.error('Etapa terraform do applier falhou', {
+        provider: 'dynatrace',
+        terraformError
+      });
+    }
+  } else {
+    logger.info('Etapa terraform Dynatrace ignorada; modo BizEvents sem dynatrace_document ativo', {
       provider: 'dynatrace',
-      terraformDir: args.terraformDir,
-      dryRun: args.dryRun
-    });
-    terraformCommands = await runTerraform(args.terraformDir, args.dryRun, 'dynatrace');
-    logger.info('Etapa terraform do applier concluída', {
-      provider: 'dynatrace',
-      commands: terraformCommands
-    });
-  } catch (error) {
-    terraformError = error instanceof Error ? error.message : String(error);
-    logger.error('Etapa terraform do applier falhou', {
-      provider: 'dynatrace',
-      terraformError
+      enableDocumentDashboard: false
     });
   }
 
@@ -245,7 +253,8 @@ export async function applyDynatrace(args: {
     eventsFile: args.eventsFile,
     dryRun: args.dryRun
   });
-  const ingestedEvents = await ingestDynatraceEvents(args.eventsFile, args.dryRun);
+  const payloadFile = path.join(args.outputDir, 'dynatrace-bizevents-payload.json');
+  const ingestedEvents = await ingestDynatraceEvents(args.eventsFile, args.dryRun, { payloadFile });
   const failedEventsCount = ingestedEvents.filter((event) => event.status === 'failed').length;
   logger.info('Ingestão de eventos Dynatrace concluída', {
     ingestedEvents: ingestedEvents.length,
