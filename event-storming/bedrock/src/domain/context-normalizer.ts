@@ -603,12 +603,12 @@ export function canonicalizeContext(
   const actors = unique(rows.map((row) => row.actor));
 
   const recognizedFlows = context.recognizedFlows.length > 0
-    ? context.recognizedFlows.map((flow) => ({
+    ? ensureFlowCoverage(context.recognizedFlows.map((flow) => ({
         ...flow,
         stages: unique(flow.stages.map(slugify)).filter((stage) => stages.includes(stage)),
         services: unique(flow.services.map(normalizeService)).filter((service) => services.includes(service)),
         actors: unique(flow.actors.map(normalizeActor)).filter((actor) => actors.includes(actor))
-      }))
+      })), { stages, services, actors })
     : [
         {
           name: 'project_input',
@@ -625,6 +625,52 @@ export function canonicalizeContext(
     rows,
     assumptions: unique(context.assumptions.map((assumption) => assumption.trim()).filter(Boolean))
   };
+}
+
+function ensureFlowCoverage(
+  flows: RecognizedContext['recognizedFlows'],
+  coverage: {
+    stages: string[];
+    services: string[];
+    actors: string[];
+  }
+): RecognizedContext['recognizedFlows'] {
+  if (flows.length === 0) {
+    return [
+      {
+        name: 'project_input',
+        description: 'Fluxo consolidado automaticamente a partir dos eventos reconhecidos.',
+        stages: coverage.stages,
+        services: coverage.services,
+        actors: coverage.actors,
+        confidence: 0.5
+      }
+    ];
+  }
+
+  const normalizedFlows = flows.map((flow) => ({
+    ...flow,
+    stages: flow.stages.length > 0 ? flow.stages : coverage.stages,
+    services: flow.services.length > 0 ? flow.services : coverage.services,
+    actors: flow.actors.length > 0 ? flow.actors : coverage.actors
+  }));
+  const coveredStages = new Set(normalizedFlows.flatMap((flow) => flow.stages));
+  const missingStages = coverage.stages.filter((stage) => !coveredStages.has(stage));
+
+  if (missingStages.length === 0) {
+    return normalizedFlows;
+  }
+
+  const [firstFlow, ...remainingFlows] = normalizedFlows;
+  return [
+    {
+      ...firstFlow,
+      stages: unique([...firstFlow.stages, ...missingStages]),
+      services: unique([...firstFlow.services, ...coverage.services]),
+      actors: unique([...firstFlow.actors, ...coverage.actors])
+    },
+    ...remainingFlows
+  ];
 }
 
 function buildStrongestTouchPointByEvent(

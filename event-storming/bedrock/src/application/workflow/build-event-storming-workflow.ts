@@ -6,6 +6,7 @@ import {
   failNode,
   observeImageNode,
   normalizeContextNode,
+  prepareImageOcrNode,
   validateCandidateEventsNode,
   validateImageObservationNode,
   validateNormalizationNode,
@@ -26,6 +27,7 @@ export function buildEventStormingWorkflow() {
   logger.info('Construindo grafo LangGraph do workflow de event storming');
 
   return new StateGraph(GraphState)
+    .addNode('prepare_image_ocr', prepareImageOcrNode)
     .addNode('observe_image', observeImageNode)
     .addNode('validate_image_observation', validateImageObservationNode)
     .addNode('extract_events', extractEventsNode)
@@ -36,6 +38,7 @@ export function buildEventStormingWorkflow() {
     .addNode('validate_workbook', validateWorkbookNode)
     .addNode('fail', failNode)
     .addConditionalEdges(START, routeFromStart)
+    .addEdge('prepare_image_ocr', 'observe_image')
     .addEdge('observe_image', 'validate_image_observation')
     .addConditionalEdges('validate_image_observation', routeAfterObservation)
     .addEdge('extract_events', 'validate_candidate_events')

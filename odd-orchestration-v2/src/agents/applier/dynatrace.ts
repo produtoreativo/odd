@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { CustomEventPayload } from '../../shared/types.js';
 
 export type DynatraceEventIngestionResult = {
@@ -10,7 +9,16 @@ export type DynatraceEventIngestionResult = {
   error?: string;
 };
 
-type DynatraceBizEventIngest = Record<string, string | number | boolean>;
+type DynatraceBizEventData = Record<string, string | number | boolean>;
+
+type DynatraceCloudEvent = {
+  specversion: '1.0';
+  id: string;
+  source: string;
+  type: string;
+  time: string;
+  data: DynatraceBizEventData;
+};
 
 type DynatraceAuth = {
   header: string;
@@ -40,7 +48,7 @@ export async function ingestEvents(
   options: DynatraceIngestionOptions = {}
 ): Promise<DynatraceEventIngestionResult[]> {
   const events = await readEvents(filePath);
-  const payload = events.map(toDynatraceBizEventPayload);
+  const payload = events.map(toDynatraceCloudEventPayload);
   if (options.payloadFile) {
     await writeFile(options.payloadFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
   }
@@ -53,10 +61,10 @@ export async function ingestEvents(
   for (const batch of chunkEvents(payload, resolveBatchSize())) {
     try {
       const response = await sendEventsBatch(batch);
-      results.push(...batch.map((event) => ({ title: String(event['event.type']), status: 'sent' as const, response })));
+      results.push(...batch.map((event) => ({ title: event.type, status: 'sent' as const, response })));
     } catch (error) {
       results.push(...batch.map((event) => ({
-        title: String(event['event.type']),
+        title: event.type,
         status: 'failed' as const,
         error: error instanceof Error ? error.message : String(error)
       })));
@@ -71,29 +79,26 @@ function resolveBatchSize(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
 
-function chunkEvents(events: DynatraceBizEventIngest[], batchSize: number): DynatraceBizEventIngest[][] {
-  const chunks: DynatraceBizEventIngest[][] = [];
+function chunkEvents(events: DynatraceCloudEvent[], batchSize: number): DynatraceCloudEvent[][] {
+  const chunks: DynatraceCloudEvent[][] = [];
   for (let index = 0; index < events.length; index += batchSize) {
     chunks.push(events.slice(index, index + batchSize));
   }
   return chunks;
 }
 
-function appendTagFields(payload: DynatraceBizEventIngest, event: CustomEventPayload): void {
+function appendTagFields(data: DynatraceBizEventData, event: CustomEventPayload): void {
   for (const tag of event.tags) {
     const [key, ...rest] = tag.split(':');
     if (!key || rest.length === 0) continue;
-    payload[`odd.tag.${key}`] = rest.join(':');
+    data[`odd.tag.${key}`] = rest.join(':');
   }
 }
 
-function toDynatraceBizEventPayload(event: CustomEventPayload): DynatraceBizEventIngest {
+function toDynatraceCloudEventPayload(event: CustomEventPayload): DynatraceCloudEvent {
   const isError = event.alert_type === 'error' || event.tags.includes('exception:true') || event.tags.includes('outcome:problem');
   const provider = process.env.DYNATRACE_BIZEVENT_PROVIDER || 'odd-orchestration-v2';
-  const payload: DynatraceBizEventIngest = {
-    'event.id': randomUUID(),
-    'event.provider': provider,
-    'event.type': event.title,
+  const data: DynatraceBizEventData = {
     title: event.title,
     text: event.text,
     'odd.alert_type': event.alert_type ?? (isError ? 'error' : 'info'),
@@ -102,22 +107,29 @@ function toDynatraceBizEventPayload(event: CustomEventPayload): DynatraceBizEven
   };
 
   if (event.priority) {
-    payload['odd.priority'] = event.priority;
+    data['odd.priority'] = event.priority;
   }
   if (event.aggregation_key) {
-    payload['odd.aggregation_key'] = event.aggregation_key;
+    data['odd.aggregation_key'] = event.aggregation_key;
   }
   if (event.source_type_name) {
-    payload['odd.source_type_name'] = event.source_type_name;
+    data['odd.source_type_name'] = event.source_type_name;
   }
 
   const managementZone = resolveManagementZone(event);
   if (managementZone) {
-    payload['odd.management_zone'] = managementZone;
+    data['odd.management_zone'] = managementZone;
   }
 
-  appendTagFields(payload, event);
-  return payload;
+  appendTagFields(data, event);
+  return {
+    specversion: '1.0',
+    id: randomUUID(),
+    source: provider,
+    type: event.title,
+    time: new Date().toISOString(),
+    data
+  };
 }
 
 function resolveAuth(): DynatraceAuth | undefined {
@@ -147,7 +159,7 @@ function buildDynatraceError(status: number, responseText: string, titles: strin
   return new Error(`Erro ao enviar batch de Business Events para Dynatrace (${titles}): ${status} ${responseText}.${scopeHint}`);
 }
 
-async function sendEventsBatch(payload: DynatraceBizEventIngest[]): Promise<unknown> {
+async function sendEventsBatch(payload: DynatraceCloudEvent[]): Promise<unknown> {
   const envUrl = process.env.DYNATRACE_ENV_URL;
   const auth = resolveAuth();
 
@@ -166,14 +178,14 @@ async function sendEventsBatch(payload: DynatraceBizEventIngest[]): Promise<unkn
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/cloudevents-batch+json',
       Authorization: auth.header
     },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    const titles = payload.map((event) => String(event['event.type'])).join(', ');
+    const titles = payload.map((event) => event.type).join(', ');
     throw buildDynatraceError(response.status, await response.text(), titles, auth.source);
   }
 

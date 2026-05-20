@@ -42,6 +42,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         maxAttempts: args.maxAttempts,
+        ocrObservation: null,
         imageObservation: preloadedState.imageObservation,
         candidateContext: preloadedState.candidateContext
       },
@@ -96,12 +97,16 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   }
 
   const observationPath = path.join(args.outputDir, 'image-observation.json');
+  const ocrObservationPath = path.join(args.outputDir, 'ocr-observation.json');
   const candidatePath = path.join(args.outputDir, 'candidate-events.json');
   const recognizedPath = path.join(args.outputDir, 'recognized-context.json');
   const standardizedPath = path.join(args.outputDir, 'standardized-context.json');
   const workbookPath = path.join(args.outputDir, 'workbook.json');
   const xlsxPath = path.join(args.outputDir, 'recognized-event-storming.xlsx');
 
+  if (result.ocrObservation) {
+    await writeJsonFile(ocrObservationPath, result.ocrObservation);
+  }
   if (result.imageObservation) {
     await writeJsonFile(observationPath, result.imageObservation);
   }
@@ -119,6 +124,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
 
   logger.info('Workflow finalizado com sucesso', {
     observationPath,
+    ocrObservationPath,
     candidatePath,
     recognizedPath,
     standardizedPath,
@@ -151,11 +157,12 @@ async function loadPreloadedState(args: CliArgs): Promise<{
     throw new Error('Argumento obrigatório ausente para --start-from normalize: --candidate-context');
   }
 
-  const candidateContext = CandidateContextSchema.parse(
-    await readJsonFile(args.candidateContext)
-  );
+  const imageObservation = args.imageObservation
+    ? ImageObservationSchema.parse(await readJsonFile(args.imageObservation))
+    : null;
+  const candidateContext = CandidateContextSchema.parse(await readJsonFile(args.candidateContext));
 
-  return { imageObservation: null, candidateContext };
+  return { imageObservation, candidateContext };
 }
 
 function buildWorkflowSummary(
@@ -164,6 +171,7 @@ function buildWorkflowSummary(
 ) {
   const totalDurationMs = Date.now() - workflowStartedAt;
   const orderedSteps: WorkflowStepName[] = [
+    'prepare_image_ocr',
     'observe_image',
     'validate_image_observation',
     'extract_events',

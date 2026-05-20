@@ -47,6 +47,39 @@ export function validateImageObservation(observation: ImageObservation | null): 
     if (!observation.textsOutsideShapes.includes(semantic.eventTitle)) {
       issues.push(`eventVisualSemantic fora de textsOutsideShapes: ${semantic.eventTitle}`);
     }
+    if (isLowConfidenceTechnicalLabel(semantic.eventTitle, semantic.confidence)) {
+      issues.push(`eventVisualSemantic com baixa confiança para label técnica: ${semantic.eventTitle}`);
+    }
+    if (hasSuspiciousMixedShortSegment(semantic.eventTitle) && semantic.confidence >= 0.85) {
+      issues.push(`eventVisualSemantic com confiança alta para segmento OCR ambíguo: ${semantic.eventTitle}`);
+    }
+  }
+
+  for (const textObservation of observation.textObservations) {
+    if (textObservation.kind === 'event_candidate' && !observation.textsOutsideShapes.includes(textObservation.text)) {
+      issues.push(`textObservation event_candidate fora de textsOutsideShapes: ${textObservation.text}`);
+    }
+    if (isLowConfidenceTechnicalLabel(textObservation.text, textObservation.confidence)) {
+      issues.push(`textObservation com baixa confiança para label técnica: ${textObservation.text}`);
+    }
+    if (
+      hasSuspiciousMixedShortSegment(textObservation.text)
+      && textObservation.confidence >= 0.85
+      && !textObservation.needsOcrReview
+      && textObservation.ocrAlternatives.length === 0
+      && textObservation.ambiguousCharacters.length === 0
+    ) {
+      issues.push(`textObservation com confiança alta para segmento OCR ambíguo sem revisão: ${textObservation.text}`);
+    }
+    if (
+      textObservation.kind === 'event_candidate'
+      && textObservation.needsOcrReview
+      && observation.textsOutsideShapes.includes(textObservation.text)
+      && !observation.uncertainItems.includes(textObservation.text)
+      && !mentionsVisualConfirmation(textObservation.reasoning)
+    ) {
+      issues.push(`textObservation OCR incerta usada como evento sem confirmação visual ou uncertainItems: ${textObservation.text}`);
+    }
   }
 
   for (const flow of observation.flowsDetected) {
@@ -67,6 +100,31 @@ export function validateImageObservation(observation: ImageObservation | null): 
     });
   }
   return normalizedIssues;
+}
+
+function isLowConfidenceTechnicalLabel(label: string, confidence: number): boolean {
+  return label.includes('.') && label.length >= 8 && confidence < 0.85;
+}
+
+function hasSuspiciousMixedShortSegment(label: string): boolean {
+  if (!isTechnicalLabel(label)) {
+    return false;
+  }
+
+  return label
+    .split(/[._\-/:]+/)
+    .some((segment) => segment.length > 0 && segment.length <= 4 && /[a-zA-Z]/.test(segment) && /\d/.test(segment));
+}
+
+function isTechnicalLabel(label: string): boolean {
+  return /[._\-/:]/.test(label) && /^[a-zA-Z0-9._\-/:]+$/.test(label);
+}
+
+function mentionsVisualConfirmation(reasoning: string): boolean {
+  const normalizedReasoning = slugify(reasoning);
+  return normalizedReasoning.includes('validada_visualmente')
+    || normalizedReasoning.includes('confirmada_visualmente')
+    || normalizedReasoning.includes('confirmado_visualmente');
 }
 
 export function validateCandidateContext(candidateContext: CandidateContext | null): string[] {

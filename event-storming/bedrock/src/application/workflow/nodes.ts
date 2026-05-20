@@ -2,9 +2,12 @@ import path from 'node:path';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import {
   CandidateContextSchema,
+  CandidateContext,
   ImageObservation,
   ImageObservationSchema,
   NormalizationReviewSchema,
+  OcrObservation,
+  OcrObservationSchema,
   PROJECT_FORMAT_COLUMNS,
   REQUIRED_COLUMNS,
   WorkbookSchema
@@ -32,8 +35,63 @@ import {
 import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
+import { recognizeTechnicalLabels } from '../../infrastructure/ocr/technical-label-ocr.js';
 
 const logger = new Logger('workflow-nodes');
+
+export async function prepareImageOcrNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó prepare_image_ocr', {
+    inputImage: state.inputImage
+  });
+
+  const execute = traceStep(
+    async () => {
+      try {
+        const ocrObservation = OcrObservationSchema.parse(await recognizeTechnicalLabels(state.inputImage, {
+          outputDir: state.outputDir
+        }));
+        await persistStageJson(state.outputDir, '00-ocr-observation.json', ocrObservation);
+
+        logger.info('Nó prepare_image_ocr concluído com sucesso', {
+          textCount: ocrObservation.texts.length
+        });
+
+        return {
+          ocrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_image_ocr', startedAt)
+        };
+      } catch (error) {
+        const message = formatError(error);
+        logger.warn('Falha no OCR técnico; workflow continuará apenas com observação multimodal', {
+          error: message
+        });
+
+        const ocrObservation = OcrObservationSchema.parse({
+          inputImage: state.inputImage,
+          texts: [],
+          assumptions: [`OCR técnico não executado com sucesso: ${message}`]
+        });
+        await persistStageJson(state.outputDir, '00-ocr-observation.json', ocrObservation);
+
+        return {
+          ocrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_image_ocr', startedAt)
+        };
+      }
+    },
+    {
+      name: 'prepare_image_ocr_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
 
 export async function observeImageNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
@@ -45,19 +103,23 @@ export async function observeImageNode(state: WorkflowGraphState) {
     feedbackLength: feedback.length
   });
 
-  const prompt = await renderPrompt('observe-image.prompt.md', { feedback });
+  const prompt = await renderPrompt('observe-image.prompt.md', {
+    feedback,
+    ocr_json: JSON.stringify(buildPromptOcrObservation(state.ocrObservation), null, 2)
+  });
 
   const execute = traceStep(
     async () => {
       const response = await buildChatModel(state.provider, state.observeModel).invoke([
         new SystemMessage(prompt),
-        new HumanMessage({
-          content: [
-            { type: 'text', text: `Arquivo de entrada: ${path.basename(state.inputImage)}` },
-            { type: 'text', text: 'Observe a imagem e retorne apenas o JSON solicitado.' },
-            imageContentFromFile(state.inputImage)
-          ]
-        })
+	        new HumanMessage({
+	          content: [
+	            { type: 'text', text: `Arquivo de entrada: ${path.basename(state.inputImage)}` },
+	            { type: 'text', text: 'Observe a imagem e retorne apenas o JSON solicitado.' },
+	            imageContentFromFile(state.inputImage),
+	            ...buildOcrReviewImageContent(state.ocrObservation)
+	          ]
+	        })
       ]);
       const parsedPayload = response.content;
       await persistRawResponse(state.outputDir, '01-image-observation', attempt, parsedPayload);
@@ -183,12 +245,15 @@ export async function extractEventsNode(state: WorkflowGraphState) {
       ]);
       await persistRawResponse(state.outputDir, '02-candidate-events', attempt, response.content);
 
+      const parsedCandidateContext = CandidateContextSchema.parse(parseJsonResponse(response.content));
       const candidateContext = normalizeCandidateContextDomainModels(
-        enrichCandidateContextFromObservation(
-          CandidateContextSchema.parse(parseJsonResponse(response.content)),
-          imageObservation,
-          { inputImage: state.inputImage, env: state.env }
-        ),
+        shouldUseDeterministicCandidateContext(parsedCandidateContext, imageObservation)
+          ? deterministicCandidateContext
+          : enrichCandidateContextFromObservation(
+              parsedCandidateContext,
+              imageObservation,
+              { inputImage: state.inputImage, env: state.env }
+            ),
         { inputImage: state.inputImage, env: state.env }
       );
       await persistStageJson(state.outputDir, '02-candidate-events.json', candidateContext);
@@ -299,7 +364,8 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
 
   const prompt = await renderPrompt('normalize-context.prompt.md', {
     feedback: state.normalizeAttempts > 0 ? state.normalizeFeedback : 'Nenhum.',
-    input_json: JSON.stringify(candidateContext, null, 2)
+    input_json: JSON.stringify(candidateContext, null, 2),
+    observation_json: JSON.stringify(state.imageObservation ?? null, null, 2)
   });
 
   const model = buildChatModel(state.provider, state.normalizeModel);
@@ -311,7 +377,12 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
     async () => {
       const response = await model.invoke([
         new SystemMessage(prompt),
-        new HumanMessage('Revise os candidatos e devolva apenas o JSON de correções.')
+        new HumanMessage({
+          content: [
+            { type: 'text', text: 'Revise os candidatos contra a observação visual e a imagem original. Devolva apenas o JSON de correções.' },
+            imageContentFromFile(state.inputImage)
+          ]
+        })
       ]);
       await persistRawResponse(state.outputDir, '03-standardized-context', attempt, response.content);
 
@@ -563,6 +634,16 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     ...observation,
     touchPointsDetected,
     textsOutsideShapes,
+    textObservations: observation.textObservations
+      .map((textObservation) => ({
+        ...textObservation,
+        text: textObservation.text.trim(),
+        locationHint: textObservation.locationHint?.trim(),
+        ocrAlternatives: uniqueStrings(textObservation.ocrAlternatives),
+        ambiguousCharacters: uniqueStrings(textObservation.ambiguousCharacters),
+        reasoning: textObservation.reasoning.trim()
+      }))
+      .filter((textObservation) => textObservation.text !== ''),
     eventVisualSemantics: observation.eventVisualSemantics
       .map((semantic) => ({
         ...semantic,
@@ -593,6 +674,63 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     uncertainItems,
     assumptions: buildObservationAssumptions(uncertainItems)
   };
+}
+
+function buildPromptOcrObservation(ocrObservation: OcrObservation | null): OcrObservation | null {
+  if (!ocrObservation) {
+    return null;
+  }
+
+  const trustedTexts = ocrObservation.texts.filter((text) => !text.needsOcrReview);
+  const withheldTexts = ocrObservation.texts.filter((text) => text.needsOcrReview);
+
+  return {
+    ...ocrObservation,
+    texts: trustedTexts,
+    assumptions: [
+      ...ocrObservation.assumptions,
+      ...withheldTexts.map((text) =>
+        `OCR leu '${text.text}' com baixa confiança e essa leitura foi omitida do OCR primário enviado ao agente; use a imagem original para transcrever essa região.`
+      )
+    ]
+  };
+}
+
+function buildOcrReviewImageContent(ocrObservation: OcrObservation | null) {
+  if (!ocrObservation) {
+    return [];
+  }
+
+  return ocrObservation.texts
+    .filter((text) => text.needsOcrReview && text.cropImage)
+    .flatMap((text, index) => [
+      {
+        type: 'text' as const,
+        text: `Crop ampliado para revisão OCR ${index + 1}. Transcreva a label técnica visualmente; não use a hipótese OCR como definitiva.`
+      },
+      imageContentFromFile(text.cropImage as string)
+    ]);
+}
+
+function shouldUseDeterministicCandidateContext(
+  candidateContext: CandidateContext,
+  observation: ImageObservation
+): boolean {
+  const observedEvents = new Set(observation.textsOutsideShapes);
+  const hasUnobservedCandidateEvent = candidateContext.candidateEvents
+    .some((event) => !observedEvents.has(event.event_title));
+  const hasUnobservedFlowEvent = candidateContext.candidateFlows
+    .some((flow) => flow.orderedEventTitles.some((eventTitle) => !observedEvents.has(eventTitle)));
+
+  if (hasUnobservedCandidateEvent || hasUnobservedFlowEvent) {
+    logger.warn('Extração LLM gerou eventos fora de textsOutsideShapes; usando candidatos determinísticos da observação', {
+      hasUnobservedCandidateEvent,
+      hasUnobservedFlowEvent
+    });
+    return true;
+  }
+
+  return false;
 }
 
 function uniqueStrings(items: string[]): string[] {

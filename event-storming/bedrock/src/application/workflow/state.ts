@@ -2,12 +2,14 @@ import { Annotation } from '@langchain/langgraph';
 import {
   CandidateContext,
   ImageObservation,
+  OcrObservation,
   RecognizedContext,
   WorkbookPayload
 } from '../../domain/event-storming-schema.js';
 import { SupportedProvider } from '../../infrastructure/llm/chat-model-factory.js';
 
 export type WorkflowStepName =
+  | 'prepare_image_ocr'
   | 'observe_image'
   | 'validate_image_observation'
   | 'extract_events'
@@ -44,6 +46,7 @@ export const GraphState = Annotation.Root({
   extractFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
   normalizeFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
   workbookFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
+  ocrObservation: Annotation<OcrObservation | null>({ default: () => null, reducer: (_, right) => right }),
   imageObservation: Annotation<ImageObservation | null>({ default: () => null, reducer: (_, right) => right }),
   candidateContext: Annotation<CandidateContext | null>({ default: () => null, reducer: (_, right) => right }),
   standardizedContext: Annotation<RecognizedContext | null>({ default: () => null, reducer: (_, right) => right }),

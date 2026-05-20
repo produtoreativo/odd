@@ -21,7 +21,7 @@ export function routeFromStart(state: WorkflowGraphState) {
   if (state.startFrom === 'normalize') {
     return 'normalize_context';
   }
-  return 'observe_image';
+  return 'prepare_image_ocr';
 }
 
 export function routeAfterObservation(state: WorkflowGraphState) {

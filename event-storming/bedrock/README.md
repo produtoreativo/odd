@@ -3,10 +3,11 @@
 Workflow em TypeScript com LangGraph para processar imagens de event storming usando Amazon Bedrock.
 
 O fluxo executa:
-1. observação multimodal da imagem;
-2. extração de eventos e fluxos candidatos com enriquecimento de metadados de projeto;
-3. normalização do contexto em formato de projeto;
-4. geração da planilha final no modelo usado em `odd/odd-orchestrator/samples/event-storming-tuangou-project-format.xlsx`.
+1. preparação OCR local de labels técnicas em vermelho;
+2. observação multimodal da imagem usando o OCR estruturado como evidência de texto;
+3. extração de eventos e fluxos candidatos com enriquecimento de metadados de projeto;
+4. normalização do contexto em formato de projeto;
+5. geração da planilha final no modelo usado em `odd/odd-orchestrator/samples/event-storming-tuangou-project-format.xlsx`.
 
 ## Execução
 
@@ -39,7 +40,8 @@ npm run start -- \
   --output-dir ./generated/payments \
   --provider bedrock \
   --start-from normalize \
-  --candidate-context ./generated/payments/02-candidate-events.json
+  --candidate-context ./generated/payments/02-candidate-events.json \
+  --image-observation ./generated/payments/01-image-observation.json
 ```
 
 ## Argumentos
@@ -49,7 +51,7 @@ npm run start -- \
 - `--provider`: use `bedrock`
 - `--env`: ambiente usado no `query_hint`; opcional, padrão `dev`
 - `--start-from`: `observe`, `extract` ou `normalize`
-- `--image-observation`: obrigatório com `--start-from extract`
+- `--image-observation`: obrigatório com `--start-from extract`; recomendado com `--start-from normalize` para revisão OCR/semântica
 - `--candidate-context`: obrigatório com `--start-from normalize`
 - `--model`: fallback global para todos os agentes
 - `--observe-model`: override do modelo do agente de observação
@@ -78,6 +80,8 @@ As credenciais AWS podem vir do ambiente padrão do SDK:
 ## Saídas
 
 - `01-image-observation.json`
+- `00-ocr-observation.json`: OCR local estruturado das labels técnicas detectadas
+- `00-ocr-red-labels.png`: imagem preprocessada para OCR de labels vermelhas
 - `01-image-observation.attempt-<n>.raw.txt`
 - `02-candidate-events.json`: eventos candidatos normalizados com `source_touch_point`, `stage`, `service` e `tags` aderentes ao contrato dos prompts
 - `02-candidate-events.attempt-<n>.raw.txt`
