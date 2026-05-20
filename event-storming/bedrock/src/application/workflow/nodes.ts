@@ -628,8 +628,21 @@ async function persistRawResponse(outputDir: string, stagePrefix: string, attemp
 function sanitizeImageObservation(observation: ImageObservation): ImageObservation {
   const textsOutsideShapes = uniqueStrings(observation.textsOutsideShapes);
   const areasDetected = uniqueStrings(observation.areasDetected);
-  const touchPointsDetected = uniqueStrings(observation.touchPointsDetected);
+  const rawTouchPointsDetected = uniqueStrings(observation.touchPointsDetected);
+  const touchPointsDetected = rawTouchPointsDetected.filter((touchPointTitle) => !textsOutsideShapes.includes(touchPointTitle));
+  const droppedTouchPoints = rawTouchPointsDetected.filter((touchPointTitle) => textsOutsideShapes.includes(touchPointTitle));
   const uncertainItems = uniqueStrings(observation.uncertainItems);
+  const roleByEvent = new Map(
+    observation.eventVisualSemantics.map((semantic) => [
+      semantic.eventTitle.trim(),
+      roleFromColor(semantic.colorHex, semantic.role)
+    ])
+  );
+  const touchPointByEvent = deriveTouchPointAssignment(observation.flowsDetected, roleByEvent, touchPointsDetected);
+  const touchPointReassignments = collectTouchPointReassignments(
+    observation.touchPointEventCorrelations,
+    touchPointByEvent
+  );
 
   return {
     ...observation,
@@ -650,16 +663,16 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
       .map((semantic) => ({
         ...semantic,
         eventTitle: semantic.eventTitle.trim(),
+        role: roleFromColor(semantic.colorHex, semantic.role),
         reasoning: semantic.reasoning.trim()
       }))
       .filter((semantic) => semantic.eventTitle !== '' && textsOutsideShapes.includes(semantic.eventTitle)),
-    touchPointEventCorrelations: observation.touchPointEventCorrelations
-      .map((correlation) => ({
-        ...correlation,
-        eventsObservedAroundTouchPoint: uniqueStrings(correlation.eventsObservedAroundTouchPoint)
-          .filter((eventTitle) => textsOutsideShapes.includes(eventTitle))
-      }))
-      .filter((correlation) => correlation.touchPointTitle.trim() !== ''),
+    touchPointEventCorrelations: rebuildTouchPointEventCorrelations(
+      observation.touchPointEventCorrelations,
+      touchPointByEvent,
+      touchPointsDetected,
+      textsOutsideShapes
+    ),
     flowsDetected: observation.flowsDetected
       .map((flow) => ({
         ...flow,
@@ -674,8 +687,185 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     actorsDetected: uniqueStrings(observation.actorsDetected),
     servicesDetected: uniqueStrings(observation.servicesDetected),
     uncertainItems,
-    assumptions: buildObservationAssumptions(uncertainItems)
+    assumptions: buildObservationAssumptions(uncertainItems, droppedTouchPoints, touchPointReassignments)
   };
+}
+
+function deriveTouchPointAssignment(
+  flows: ImageObservation['flowsDetected'],
+  roleByEvent: Map<string, ImageObservation['eventVisualSemantics'][number]['role']>,
+  validTouchPoints: string[]
+): Map<string, string> {
+  const assignment = new Map<string, string>();
+  const sortedFlows = [...flows].sort((left, right) => flowPriority(left) - flowPriority(right));
+
+  for (const flow of sortedFlows) {
+    const orderedTouchPoints = flow.touchPoints.filter((touchPointTitle) => validTouchPoints.includes(touchPointTitle));
+    if (orderedTouchPoints.length === 0) {
+      continue;
+    }
+    const touchPointsWithProtagonist = new Set<string>();
+    for (const [event, owner] of assignment.entries()) {
+      if (orderedTouchPoints.includes(owner) && roleByEvent.get(event) === 'protagonist') {
+        touchPointsWithProtagonist.add(owner);
+      }
+    }
+
+    let touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, 0);
+    let lastObservedTouchPoint: string | undefined;
+    const pendingEvents: string[] = [];
+
+    for (const eventTitle of flow.orderedEventTitles) {
+      const existingOwner = assignment.get(eventTitle);
+      const role = roleByEvent.get(eventTitle);
+
+      if (existingOwner) {
+        lastObservedTouchPoint = existingOwner;
+        const ownerIndex = orderedTouchPoints.indexOf(existingOwner);
+        if (ownerIndex >= 0) {
+          touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, ownerIndex + 1);
+        }
+        continue;
+      }
+
+      if (role === 'protagonist') {
+        const owner = touchPointCursor !== -1
+          ? orderedTouchPoints[touchPointCursor]
+          : lastObservedTouchPoint || orderedTouchPoints[orderedTouchPoints.length - 1];
+
+        assignment.set(eventTitle, owner);
+        touchPointsWithProtagonist.add(owner);
+
+        const pendingOwner = lastObservedTouchPoint || owner;
+        for (const pendingEvent of pendingEvents) {
+          if (!assignment.has(pendingEvent)) {
+            assignment.set(pendingEvent, pendingOwner);
+          }
+        }
+        pendingEvents.length = 0;
+        lastObservedTouchPoint = owner;
+        touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, touchPointCursor === -1 ? 0 : touchPointCursor + 1);
+        continue;
+      }
+
+      pendingEvents.push(eventTitle);
+    }
+
+    if (pendingEvents.length > 0) {
+      const fallbackOwner = lastObservedTouchPoint
+        || (touchPointCursor !== -1 ? orderedTouchPoints[touchPointCursor] : orderedTouchPoints[orderedTouchPoints.length - 1]);
+      for (const pendingEvent of pendingEvents) {
+        if (!assignment.has(pendingEvent)) {
+          assignment.set(pendingEvent, fallbackOwner);
+        }
+      }
+    }
+  }
+
+  return assignment;
+}
+
+function nextAvailableTouchPoint(
+  orderedTouchPoints: string[],
+  alreadyTaken: Set<string>,
+  startIndex: number
+): number {
+  for (let index = Math.max(0, startIndex); index < orderedTouchPoints.length; index += 1) {
+    if (!alreadyTaken.has(orderedTouchPoints[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function flowPriority(flow: ImageObservation['flowsDetected'][number]): number {
+  if (flow.flowType === 'main') {
+    return 0;
+  }
+  if (flow.flowType === 'unknown') {
+    return 1;
+  }
+  return 2;
+}
+
+function collectTouchPointReassignments(
+  correlations: ImageObservation['touchPointEventCorrelations'],
+  touchPointByEvent: Map<string, string>
+): Array<{ eventTitle: string; from: string; to: string }> {
+  const reassignments: Array<{ eventTitle: string; from: string; to: string }> = [];
+  for (const correlation of correlations) {
+    for (const eventTitle of correlation.eventsObservedAroundTouchPoint) {
+      const expected = touchPointByEvent.get(eventTitle.trim());
+      if (expected && expected !== correlation.touchPointTitle.trim()) {
+        reassignments.push({
+          eventTitle: eventTitle.trim(),
+          from: correlation.touchPointTitle.trim(),
+          to: expected
+        });
+      }
+    }
+  }
+  return reassignments;
+}
+
+function rebuildTouchPointEventCorrelations(
+  correlations: ImageObservation['touchPointEventCorrelations'],
+  touchPointByEvent: Map<string, string>,
+  validTouchPoints: string[],
+  observedEvents: string[]
+): ImageObservation['touchPointEventCorrelations'] {
+  const correlationByTouchPoint = new Map<string, ImageObservation['touchPointEventCorrelations'][number]>();
+
+  for (const correlation of correlations) {
+    const trimmedTitle = correlation.touchPointTitle.trim();
+    if (!validTouchPoints.includes(trimmedTitle)) {
+      continue;
+    }
+    correlationByTouchPoint.set(trimmedTitle, {
+      ...correlation,
+      touchPointTitle: trimmedTitle,
+      eventsObservedAroundTouchPoint: []
+    });
+  }
+
+  for (const touchPointTitle of validTouchPoints) {
+    if (!correlationByTouchPoint.has(touchPointTitle)) {
+      correlationByTouchPoint.set(touchPointTitle, {
+        touchPointTitle,
+        eventsObservedAroundTouchPoint: [],
+        confidence: 0.7,
+        reasoning: 'Correlação reconstruída deterministicamente a partir de flowsDetected.orderedEventTitles e do papel de cada evento.'
+      });
+    }
+  }
+
+  for (const [eventTitle, touchPointTitle] of touchPointByEvent.entries()) {
+    if (!observedEvents.includes(eventTitle)) {
+      continue;
+    }
+    const correlation = correlationByTouchPoint.get(touchPointTitle);
+    if (!correlation) {
+      continue;
+    }
+    if (!correlation.eventsObservedAroundTouchPoint.includes(eventTitle)) {
+      correlation.eventsObservedAroundTouchPoint.push(eventTitle);
+    }
+  }
+
+  return [...correlationByTouchPoint.values()].filter((correlation) => correlation.eventsObservedAroundTouchPoint.length > 0);
+}
+
+function roleFromColor(
+  colorHex: ImageObservation['eventVisualSemantics'][number]['colorHex'],
+  fallbackRole: ImageObservation['eventVisualSemantics'][number]['role']
+): ImageObservation['eventVisualSemantics'][number]['role'] {
+  if (colorHex === '#FF0000') {
+    return 'protagonist';
+  }
+  if (colorHex === '#305CDE') {
+    return 'supporting';
+  }
+  return fallbackRole;
 }
 
 function buildPromptOcrObservation(ocrObservation: OcrObservation | null): OcrObservation | null {
@@ -739,14 +929,32 @@ function uniqueStrings(items: string[]): string[] {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 }
 
-function buildObservationAssumptions(uncertainItems: string[]): string[] {
-  if (uncertainItems.length === 0) {
-    return [];
+function buildObservationAssumptions(
+  uncertainItems: string[],
+  droppedTouchPoints: string[] = [],
+  touchPointReassignments: Array<{ eventTitle: string; from: string; to: string }> = []
+): string[] {
+  const assumptions: string[] = [];
+
+  if (uncertainItems.length > 0) {
+    assumptions.push(
+      `Os itens ${uncertainItems.map((item) => `'${item}'`).join(', ')} foram tratados como estruturais ou ambíguos e não como eventos.`
+    );
   }
 
-  return [
-    `Os itens ${uncertainItems.map((item) => `'${item}'`).join(', ')} foram tratados como estruturais ou ambíguos e não como eventos.`
-  ];
+  if (droppedTouchPoints.length > 0) {
+    assumptions.push(
+      `Os touch points ${droppedTouchPoints.map((item) => `'${item}'`).join(', ')} foram removidos por colidirem com labels de eventos outside; mantida apenas a leitura como evento.`
+    );
+  }
+
+  if (touchPointReassignments.length > 0) {
+    logger.info('Reatribuições determinísticas de source_touch_point aplicadas', {
+      reassignments: touchPointReassignments
+    });
+  }
+
+  return assumptions;
 }
 
 function buildWorkbookNotes(inputImage: string, assumptions: string[]) {

@@ -40,10 +40,34 @@ Semântica visual:
 - texto dentro de área grande, domínio, sistema, swimlane, agrupador, contêiner ou raia = área/contexto, não ponto de contato
 - texto dentro de caixa nunca é evento
 - texto fora de formas estruturais = candidato a evento
-- cor próxima de `#FF0000` = `protagonist`
-- cor próxima de `#305CDE` = `supporting`
 - seta não tracejada = fluxo `main`
 - seta tracejada = fluxo `alternate`
+
+Mapeamento de cor para papel (regra fixa, não inverter):
+- texto na cor vermelha próxima de `#FF0000` → `role: protagonist` (evento protagonista, finaliza o ponto de contato)
+- texto na cor azul próxima de `#305CDE` → `role: supporting` (evento coadjuvante, prepara/dispara o protagonista)
+- vermelho é sempre protagonista, azul é sempre coadjuvante; nunca inverta esse mapeamento mesmo que a narrativa do fluxo pareça sugerir o contrário
+- exemplo: um evento em vermelho `#FF0000` chamado "Pagamento Pendente" sempre é `protagonist`; um evento em azul `#305CDE` chamado "Intenção de Pagamento salva" sempre é `supporting`
+- a ordem narrativa típica em cada ponto de contato é `supporting` (azul) → `protagonist` (vermelho); o protagonista vermelho aparece ao final do trecho do ponto de contato
+- `flowsDetected.orderedEventTitles` deve refletir essa leitura quando a evidência visual de setas/posição permitir, mantendo `supporting` antes de `protagonist` dentro de cada ponto de contato
+
+Legenda autoritativa (precedência máxima sobre layout espacial):
+- a imagem pode conter uma LEGENDA listando eventos em ORDEM NARRATIVA, geralmente no topo-esquerdo ou rodapé, com cabeçalho como "Caminho Feliz", "Caminho Principal", "Caminho Alternativo", "Happy Path", "Alternate Path", "Fluxo Principal", "Fluxo Alternativo"
+- quando essa legenda existir, a SEQUÊNCIA dos eventos listados nela é a ORDEM AUTORITATIVA do fluxo, e tem precedência absoluta sobre qualquer interpretação da posição espacial dos rótulos coloridos espalhados pelo canvas
+- exemplo: se a legenda "Caminho Feliz" listar `Intenção de Pagamento salva, Cliente Encontrado, Pagamento Pendente, Fatura Criada`, então `flowsDetected[main].orderedEventTitles` deve ser exatamente essa lista nessa ordem, independentemente de onde cada rótulo apareça visualmente acima das caixas
+- aplique essa mesma precedência por fluxo: legenda "Caminho Alternativo" determina `orderedEventTitles` do fluxo `alternate`
+- na ausência de legenda, então use a interpretação espacial guiada por setas
+
+Atribuição do evento protagonista ao seu ponto de contato (regra crítica):
+- cada ponto de contato em `flowsDetected[i].touchPoints` tem no máximo UM protagonista vermelho próprio, que é o evento vermelho que ENCERRA o trecho daquele ponto de contato no fluxo narrativo
+- regra de mapeamento: caminhando `flowsDetected[i].orderedEventTitles` na ordem da legenda, cada protagonista vermelho encontrado FECHA o ponto de contato atual; o próximo evento (se houver) abre o próximo ponto de contato em `flowsDetected[i].touchPoints`
+- exemplo aplicado ao caso de pagamentos: fluxo `Cobrança via Checkout → Processamento de Pagamentos` com legenda `[Intenção (sup), Cliente Encontrado (sup), Pagamento Pendente (prot), Fatura Criada (prot)]` resolve para:
+  - `Cobrança via Checkout`: Intenção (sup), Cliente Encontrado (sup), Pagamento Pendente (prot) ← fecha o ponto de contato
+  - `Processamento de Pagamentos`: Fatura Criada (prot) ← fecha o ponto de contato
+- nunca associe um protagonista a um ponto de contato apenas porque o rótulo vermelho está fisicamente desenhado acima daquela caixa; o que importa é a posição do protagonista na ordem narrativa da legenda
+- antes de devolver `touchPointEventCorrelations`, para cada protagonista escreva em `reasoning` a posição dele na ordem da legenda E a contagem de protagonistas que apareceram antes dele; o N-ésimo protagonista pertence ao N-ésimo ponto de contato em `flowsDetected[i].touchPoints`
+- se a quantidade de protagonistas no fluxo for menor que a quantidade de touchPoints, os touchPoints finais (geralmente destinos) ficam sem protagonista próprio e apenas RECEBEM o protagonista anterior pela seta — não invente um protagonista para eles
+- cada `flowsDetected[i].orderedEventTitles` deve listar os eventos na ordem da legenda quando ela existir; só caia em leitura espacial quando não houver legenda
 
 Regras:
 - responda apenas JSON válido
@@ -56,12 +80,15 @@ Regras:
 - caixas isoladas ou que parecem apenas estados cadastrais sem eventos associados devem ser descartadas de `touchPointsDetected`
 - só use `touchPointsDetected` para títulos dentro de caixa que tenham relevância operacional no fluxo de eventos
 - se houver uma área grande contendo caixas internas, use a label da caixa interna associada ao evento como touch point; use a label da área grande apenas em `areasDetected`
+- uma mesma string nunca pode aparecer simultaneamente em `touchPointsDetected` e em `textsOutsideShapes`: se a label existir como evento colorido fora de caixa (azul ou vermelho), trate-a apenas como evento e remova-a de `touchPointsDetected`, mesmo que exista uma caixa interna com a mesma label
+- caixas internas cuja label é idêntica a um evento outside só devem ser registradas em `textObservations.kind = structural` com `reasoning` explicando a colisão; não devolva como touch point
 - use `textsOutsideShapes` para textos fora de caixa
 - use `textObservations` para registrar todo texto relevante lido, incluindo textos dentro e fora de caixa, com confiança OCR e localização aproximada
 - para textos fora de caixa que pareçam labels técnicas, `textObservations.text` deve ser idêntico ao item correspondente em `textsOutsideShapes`
 - todo evento em `textsOutsideShapes` deve receber uma classificação em `eventVisualSemantics`
-- `eventVisualSemantics.role = protagonist` quando a cor estiver mais próxima de `#FF0000`
-- `eventVisualSemantics.role = supporting` quando a cor estiver mais próxima de `#305CDE`
+- `eventVisualSemantics.role = protagonist` quando a cor estiver mais próxima de `#FF0000` (vermelho)
+- `eventVisualSemantics.role = supporting` quando a cor estiver mais próxima de `#305CDE` (azul)
+- nunca devolva `role = supporting` para um evento cujo `colorHex` esteja em `#FF0000`; nunca devolva `role = protagonist` para um evento cujo `colorHex` esteja em `#305CDE`; antes de finalizar a resposta, releia esta regra e verifique cada item de `eventVisualSemantics`
 - `colorHex` só pode ser `#FF0000`, `#305CDE` ou `unknown`
 - nunca devolva outro hex; se a cor não estiver claramente próxima dessas duas, use `unknown`
 - represente em `flowsDetected` cada trilha visual identificável por setas

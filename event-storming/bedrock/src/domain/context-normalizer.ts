@@ -62,6 +62,11 @@ export function candidateContextToRecognizedContext(
     rows: normalizedCandidateContext.candidateEvents.map((event) => {
       const metadata = eventMetadataByTitle.get(event.event_title)
         || buildEventMetadata(event, normalizedCandidateContext, projectMetadata);
+      const resolvedSourceTouchPoint = event.source_touch_point?.trim() || metadata.sourceTouchPoint;
+      const tagsAlignedWithSource = enforceTouchPointTag(
+        mergePromptTags(event.tags, metadata.tags),
+        resolvedSourceTouchPoint
+      );
 
       return {
         ordem: event.ordem,
@@ -70,11 +75,11 @@ export function candidateContextToRecognizedContext(
         stage: normalizeStage(event.stage || metadata.stage),
         actor: normalizeActor(event.actor || metadata.actor),
         service: normalizeService(event.service || metadata.service),
-        tags: mergePromptTags(event.tags, metadata.tags),
+        tags: tagsAlignedWithSource,
         dashboard_widget: 'event_stream',
         query_hint: '',
         source_row: null,
-        source_touch_point: event.source_touch_point?.trim() || metadata.sourceTouchPoint
+        source_touch_point: resolvedSourceTouchPoint
       };
     }),
     assumptions: normalizedCandidateContext.assumptions
@@ -97,8 +102,8 @@ export function applyNormalizationReview(
   });
 
   const correctionsByOrder = new Map(review.corrections.map((correction) => [correction.ordem, correction]));
-  const sourceTouchPointByOrder = new Map(
-    candidateContext.candidateEvents.map((event) => [event.ordem, event.source_touch_point || ''])
+  const sourceTouchPointByTitle = new Map(
+    candidateContext.candidateEvents.map((event) => [event.event_title.trim(), event.source_touch_point || ''])
   );
 
   const reviewedCandidateContext: CandidateContext = {
@@ -114,14 +119,19 @@ export function applyNormalizationReview(
         if (!correction.keep) {
           return null;
         }
+        const correctedTitle = correction.event_title.trim() || event.event_title;
+        const sourceTouchPoint = sourceTouchPointByTitle.get(correctedTitle.trim())
+          || sourceTouchPointByTitle.get(event.event_title.trim())
+          || event.source_touch_point
+          || '';
         return {
           ordem: event.ordem,
-          event_title: correction.event_title.trim() || event.event_title,
+          event_title: correctedTitle,
           stage: correction.stage.trim() || event.stage,
           actor: correction.actor.trim() || event.actor,
           service: correction.service.trim() || event.service,
           tags: correction.tags.trim() || event.tags,
-          source_touch_point: sourceTouchPointByOrder.get(event.ordem) || event.source_touch_point
+          source_touch_point: sourceTouchPoint
         };
       })
       .filter((event): event is CandidateContext['candidateEvents'][number] => event !== null),
@@ -283,7 +293,7 @@ export function normalizeCandidateContextDomainModels(
       stage: normalizeStage(event.stage || metadata.stage),
       actor: normalizeActor(event.actor || metadata.actor),
       service: normalizeService(event.service || metadata.service),
-      tags: mergePromptTags(event.tags, metadata.tags),
+      tags: enforceTouchPointTag(mergePromptTags(event.tags, metadata.tags), metadata.sourceTouchPoint),
       source_touch_point: metadata.sourceTouchPoint
     };
   });
@@ -337,13 +347,14 @@ export function enrichCandidateContextFromObservation(
     }),
     candidateEvents: candidateContext.candidateEvents.map((event) => {
       const deterministicEvent = deterministicEventByTitle.get(event.event_title);
+      const resolvedSourceTouchPoint = deterministicEvent?.source_touch_point || event.source_touch_point;
       return {
         ...event,
         stage: event.stage || deterministicEvent?.stage || event.stage,
         actor: event.actor || deterministicEvent?.actor || event.actor,
         service: event.service || deterministicEvent?.service || event.service,
         tags: event.tags || deterministicEvent?.tags || event.tags,
-        source_touch_point: event.source_touch_point || deterministicEvent?.source_touch_point
+        source_touch_point: resolvedSourceTouchPoint
       };
     })
   }, options);
@@ -931,6 +942,24 @@ function normalizeTags(tags: string): string {
   return ['touch_point', 'business_domain']
     .map((key) => {
       const value = normalizedByKey.get(key);
+      return value ? `${key}:${value}` : '';
+    })
+    .filter(Boolean)
+    .join(',');
+}
+
+function enforceTouchPointTag(tags: string, sourceTouchPoint: string | undefined): string {
+  const expectedSlug = slugify(sourceTouchPoint || '');
+  if (!expectedSlug) {
+    return tags;
+  }
+
+  const tagMap = new Map<string, string>(parsePromptTags(tags));
+  tagMap.set('touch_point', expectedSlug);
+
+  return ['touch_point', 'business_domain']
+    .map((key) => {
+      const value = tagMap.get(key);
       return value ? `${key}:${value}` : '';
     })
     .filter(Boolean)

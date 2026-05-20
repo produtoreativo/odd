@@ -16,20 +16,30 @@ npm install
 
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
   --env dev \
   --provider bedrock
 ```
+
+Cada execução grava os artefatos em uma pasta versionada:
+
+```text
+generated/<workflow-key>/<run-id>/
+```
+
+Quando `--workflow-key` não é informado, o workflow gera uma key determinística a partir do nome/caminho da imagem e do provider. `--run-id` pode ser informado para reproduzir uma pasta específica; sem ele, o valor segue o formato `yyyyMMdd_HHmmss`.
 
 Para retomar a partir do agente 2:
 
 ```bash
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
   --provider bedrock \
   --start-from extract \
-  --image-observation ./generated/payments/01-image-observation.json
+  --image-observation ./generated/payments/<run-id>/01-image-observation.json
 ```
 
 Para retomar a partir do agente 3:
@@ -37,17 +47,22 @@ Para retomar a partir do agente 3:
 ```bash
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
   --provider bedrock \
   --start-from normalize \
-  --candidate-context ./generated/payments/02-candidate-events.json \
-  --image-observation ./generated/payments/01-image-observation.json
+  --candidate-context ./generated/payments/<run-id>/02-candidate-events.json \
+  --image-observation ./generated/payments/<run-id>/01-image-observation.json
 ```
 
 ## Argumentos
 
 - `--input-image`: caminho da imagem de event storming
-- `--output-dir`: diretório de saída
+- `--workflow-key`: identidade estável da extração; usado em `generated/<workflow-key>/<run-id>/`
+- `--output`: raiz dos artefatos versionados; opcional, padrão `./generated`
+- `--output-root`: alias de `--output`
+- `--run-id`: identificador da execução; opcional, padrão `yyyyMMdd_HHmmss`
+- `--output-dir`: compatibilidade legada para diretório explícito de saída; prefira `--workflow-key` + `--output`
 - `--provider`: use `bedrock`
 - `--env`: ambiente usado no `query_hint`; opcional, padrão `dev`
 - `--start-from`: `observe`, `extract` ou `normalize`
@@ -79,6 +94,9 @@ As credenciais AWS podem vir do ambiente padrão do SDK:
 
 ## Saídas
 
+As saídas ficam dentro de `generated/<workflow-key>/<run-id>/`:
+
+- `event-storming-metadata.json`: metadados da execução, incluindo `workflowKey`, `runId`, modelos e paths
 - `01-image-observation.json`
 - `00-ocr-observation.json`: OCR local estruturado das labels técnicas detectadas
 - `00-ocr-red-labels.png`: imagem preprocessada para OCR de labels vermelhas

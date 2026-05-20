@@ -18,7 +18,11 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
 
   logger.info('Iniciando execução do workflow', {
     inputImage: args.inputImage,
+    outputRoot: args.outputRoot,
     outputDir: args.outputDir,
+    workflowKey: args.workflowKey,
+    runId: args.runId,
+    legacyOutputDir: args.legacyOutputDir,
     env: args.env,
     provider: args.provider,
     startFrom: args.startFrom,
@@ -51,7 +55,10 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         tags: ['workflow', `provider:${args.provider}`],
         metadata: {
           inputImage: args.inputImage,
+          outputRoot: args.outputRoot,
           outputDir: args.outputDir,
+          workflowKey: args.workflowKey,
+          runId: args.runId,
           env: args.env,
           provider: args.provider,
           startFrom: args.startFrom,
@@ -97,6 +104,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   }
 
   const observationPath = path.join(args.outputDir, 'image-observation.json');
+  const metadataPath = path.join(args.outputDir, 'event-storming-metadata.json');
   const ocrObservationPath = path.join(args.outputDir, 'ocr-observation.json');
   const candidatePath = path.join(args.outputDir, 'candidate-events.json');
   const recognizedPath = path.join(args.outputDir, 'recognized-context.json');
@@ -104,6 +112,21 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   const workbookPath = path.join(args.outputDir, 'workbook.json');
   const xlsxPath = path.join(args.outputDir, 'recognized-event-storming.xlsx');
 
+  await writeJsonFile(metadataPath, {
+    workflowKey: args.workflowKey,
+    runId: args.runId,
+    inputImage: args.inputImage,
+    outputRoot: args.outputRoot,
+    outputDir: args.outputDir,
+    provider: args.provider,
+    env: args.env,
+    startFrom: args.startFrom,
+    observeModel: agentModels.observeModel,
+    extractModel: agentModels.extractModel,
+    normalizeModel: agentModels.normalizeModel,
+    maxAttempts: args.maxAttempts,
+    generatedAt: new Date().toISOString()
+  });
   if (result.ocrObservation) {
     await writeJsonFile(ocrObservationPath, result.ocrObservation);
   }
@@ -123,6 +146,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   }
 
   logger.info('Workflow finalizado com sucesso', {
+    metadataPath,
     observationPath,
     ocrObservationPath,
     candidatePath,

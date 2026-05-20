@@ -29,6 +29,19 @@ export function validateImageObservation(observation: ImageObservation | null): 
       issues.push(`área/contexto classificado também como touch point: ${areaTitle}`);
     }
   }
+  for (const touchPointTitle of observation.touchPointsDetected) {
+    if (observation.textsOutsideShapes.includes(touchPointTitle)) {
+      issues.push(`touch point colide com evento outside (label duplicada): ${touchPointTitle}`);
+    }
+  }
+  for (const semantic of observation.eventVisualSemantics) {
+    if (semantic.colorHex === '#FF0000' && semantic.role === 'supporting') {
+      issues.push(`eventVisualSemantic em vermelho #FF0000 deve ter role=protagonist: ${semantic.eventTitle}`);
+    }
+    if (semantic.colorHex === '#305CDE' && semantic.role === 'protagonist') {
+      issues.push(`eventVisualSemantic em azul #305CDE deve ter role=supporting: ${semantic.eventTitle}`);
+    }
+  }
   if (observation.textsOutsideShapes.length === 0) {
     issues.push('textsOutsideShapes não pode estar vazio.');
   }
@@ -257,6 +270,14 @@ export function validateRecognizedContext(
       issues.push(`query_hint inválido para ${row.event_key}`);
     }
 
+    const touchPointTag = extractTouchPointTag(row.tags);
+    if (touchPointTag && row.source_touch_point) {
+      const expectedTouchPointSlug = slugify(row.source_touch_point);
+      if (expectedTouchPointSlug && touchPointTag !== expectedTouchPointSlug) {
+        issues.push(`tags.touch_point '${touchPointTag}' não corresponde ao source_touch_point '${row.source_touch_point}' (esperado slug '${expectedTouchPointSlug}') para ${row.event_key}`);
+      }
+    }
+
     const uniqueKey = `${row.ordem}:${row.event_key}`;
     if (rowKeys.has(uniqueKey)) {
       issues.push(`linha duplicada: ${uniqueKey}`);
@@ -287,6 +308,16 @@ export function validateRecognizedContext(
 
 function normalizeEnv(env?: string): string {
   return slugify(env || 'dev') || 'dev';
+}
+
+function extractTouchPointTag(tags: string): string | undefined {
+  for (const tag of tags.split(',')) {
+    const [rawKey, ...rest] = tag.trim().split(':');
+    if (slugify(rawKey || '') === 'touch_point' && rest.length > 0) {
+      return rest.join(':').trim();
+    }
+  }
+  return undefined;
 }
 
 export function validateWorkbook(workbook: WorkbookPayload | null): string[] {

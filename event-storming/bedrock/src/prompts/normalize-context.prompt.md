@@ -27,9 +27,14 @@ Instruções:
 - preserve `stage` no padrão slug `dominio_subdominio`
 - preserve `service` no padrão `dominio.subdominio`
 - preserve `tags` no padrão `touch_point:<slug>,business_domain:<slug>`
+- `tags.touch_point:<slug>` deve ser a versão slugificada (acentos removidos, espaços por `_`, lowercase) do `source_touch_point` correspondente; nunca devolva uma `tag.touch_point` que aponte para um touch point diferente do `source_touch_point` do evento
+- se um evento candidato chegar com `tags.touch_point` divergente do `source_touch_point`, corrija `tags.touch_point` para refletir o slug do `source_touch_point`; trate `source_touch_point` como a fonte da verdade
+- ao reordenar eventos em `corrections`, NUNCA mude implicitamente o `source_touch_point`; o ponto de contato é uma propriedade do evento, não da sua posição na lista
 - se faltar confiança, prefira remover em vez de inventar
 - `corrections` deve listar uma correção para cada `ordem`
 - se não quiser mudar uma linha, repita os valores originais e use `keep: true`
+- somente use `keep: false` quando o evento for claramente inventado, duplicado ou não existir nos `textsOutsideShapes` da observação visual; NUNCA use `keep: false` apenas porque um evento foi reatribuído a outro `source_touch_point` ou porque os `assumptions` da observação mencionam reatribuição de touch point
+- reatribuição determinística de touch point (mencionada em `assumptions` com texto tipo "reatribuído de X para Y") é apenas uma anotação de rastreabilidade do pipeline, NÃO indica que o evento deve ser removido; preserve o evento com `keep: true` e mantenha os campos atualizados
 - responda apenas JSON válido neste contrato:
 
 {

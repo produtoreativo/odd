@@ -1,6 +1,10 @@
 export type CliArgs = {
   inputImage: string;
+  outputRoot: string;
   outputDir: string;
+  workflowKey?: string;
+  runId?: string;
+  legacyOutputDir: boolean;
   env: string;
   provider: 'bedrock';
   startFrom: 'observe' | 'extract' | 'normalize';
@@ -18,7 +22,13 @@ export function parseCliArgs(argv: string[]): CliArgs {
 
   return {
     inputImage: requireStringArg(rawArgs, 'input-image'),
-    outputDir: requireStringArg(rawArgs, 'output-dir'),
+    outputRoot: optionalStringArg(rawArgs, 'output')
+      ?? optionalStringArg(rawArgs, 'output-root')
+      ?? './generated',
+    outputDir: optionalStringArg(rawArgs, 'output-dir') ?? '',
+    workflowKey: optionalStringArg(rawArgs, 'workflow-key'),
+    runId: optionalStringArg(rawArgs, 'run-id'),
+    legacyOutputDir: Boolean(optionalStringArg(rawArgs, 'output-dir')),
     env: optionalStringArg(rawArgs, 'env') ?? 'dev',
     provider: requireProviderArg(rawArgs),
     startFrom: requireStartFromArg(rawArgs),
