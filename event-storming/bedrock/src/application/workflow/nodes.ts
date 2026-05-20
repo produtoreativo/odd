@@ -627,11 +627,13 @@ async function persistRawResponse(outputDir: string, stagePrefix: string, attemp
 
 function sanitizeImageObservation(observation: ImageObservation): ImageObservation {
   const textsOutsideShapes = uniqueStrings(observation.textsOutsideShapes);
+  const areasDetected = uniqueStrings(observation.areasDetected);
   const touchPointsDetected = uniqueStrings(observation.touchPointsDetected);
   const uncertainItems = uniqueStrings(observation.uncertainItems);
 
   return {
     ...observation,
+    areasDetected,
     touchPointsDetected,
     textsOutsideShapes,
     textObservations: observation.textObservations

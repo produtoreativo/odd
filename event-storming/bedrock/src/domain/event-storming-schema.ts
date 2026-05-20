@@ -6,7 +6,7 @@ export const ObservedColorSchema = z.enum(['#FF0000', '#305CDE', 'unknown']);
 export const ObservedArrowStyleSchema = z.enum(['solid', 'dashed', 'unknown']);
 export const ObservedFlowTypeSchema = z.enum(['main', 'alternate', 'unknown']);
 
-export const ObservedTextKindSchema = z.enum(['event_candidate', 'touch_point', 'structural', 'uncertain']);
+export const ObservedTextKindSchema = z.enum(['event_candidate', 'touch_point', 'area', 'structural', 'uncertain']);
 
 export const ObservedTextSchema = z.object({
   text: z.string().min(1),
@@ -71,6 +71,7 @@ export const ObservedFlowSchema = z.object({
 });
 
 export const ImageObservationSchema = z.object({
+  areasDetected: z.array(z.string()).optional().default([]),
   touchPointsDetected: z.array(z.string()),
   textsOutsideShapes: z.array(z.string()),
   textObservations: z.array(ObservedTextSchema).optional().default([]),

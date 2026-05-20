@@ -721,10 +721,9 @@ function deriveProjectMetadata(candidateContext: CandidateContext, options: Norm
     ...candidateContext.candidateEvents.flatMap((event) => [
       event.event_title,
       event.stage,
-      event.service,
-      event.source_touch_point || ''
+      event.service
     ]),
-    ...candidateContext.candidateFlows.flatMap((flow) => [flow.name, ...flow.stages, ...flow.services])
+    ...candidateContext.candidateFlows.flatMap((flow) => [flow.name])
   ], deriveSourceSheet(options.inputImage));
 
   return { businessDomain };
@@ -735,8 +734,8 @@ function deriveProjectMetadataFromObservation(
   options: NormalizationOptions
 ): ProjectMetadata {
   const businessDomain = inferBusinessDomain([
-    ...observation.touchPointsDetected,
     ...observation.textsOutsideShapes,
+    ...observation.areasDetected,
     ...observation.servicesDetected
   ], deriveSourceSheet(options.inputImage));
 

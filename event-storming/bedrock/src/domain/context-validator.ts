@@ -24,6 +24,11 @@ export function validateImageObservation(observation: ImageObservation | null): 
   if (observation.touchPointsDetected.length === 0) {
     issues.push('touchPointsDetected não pode estar vazio.');
   }
+  for (const areaTitle of observation.areasDetected) {
+    if (observation.touchPointsDetected.includes(areaTitle)) {
+      issues.push(`área/contexto classificado também como touch point: ${areaTitle}`);
+    }
+  }
   if (observation.textsOutsideShapes.length === 0) {
     issues.push('textsOutsideShapes não pode estar vazio.');
   }
@@ -41,6 +46,12 @@ export function validateImageObservation(observation: ImageObservation | null): 
     if (!correlation.touchPointTitle.trim()) {
       issues.push('touchPointCorrelation sem touchPointTitle.');
     }
+    if (!observation.touchPointsDetected.includes(correlation.touchPointTitle)) {
+      issues.push(`touchPointCorrelation fora de touchPointsDetected: ${correlation.touchPointTitle}`);
+    }
+    if (correlation.eventsObservedAroundTouchPoint.length === 0) {
+      issues.push(`touchPointCorrelation sem eventos associados: ${correlation.touchPointTitle}`);
+    }
   }
 
   for (const semantic of observation.eventVisualSemantics) {
@@ -56,6 +67,12 @@ export function validateImageObservation(observation: ImageObservation | null): 
   }
 
   for (const textObservation of observation.textObservations) {
+    if (textObservation.kind === 'touch_point' && looksLikeContextArea(textObservation)) {
+      issues.push(`textObservation parece área/contexto, não touch point: ${textObservation.text}`);
+    }
+    if (textObservation.kind === 'area' && observation.touchPointsDetected.includes(textObservation.text)) {
+      issues.push(`textObservation area presente em touchPointsDetected: ${textObservation.text}`);
+    }
     if (textObservation.kind === 'event_candidate' && !observation.textsOutsideShapes.includes(textObservation.text)) {
       issues.push(`textObservation event_candidate fora de textsOutsideShapes: ${textObservation.text}`);
     }
@@ -91,6 +108,14 @@ export function validateImageObservation(observation: ImageObservation | null): 
         issues.push(`flowDetected com evento fora de textsOutsideShapes: ${eventTitle}`);
       }
     }
+    for (const touchPointTitle of flow.touchPoints) {
+      if (!observation.touchPointsDetected.includes(touchPointTitle)) {
+        issues.push(`flowDetected com touch point fora de touchPointsDetected: ${touchPointTitle}`);
+      }
+      if (observation.areasDetected.includes(touchPointTitle)) {
+        issues.push(`flowDetected usa área/contexto como touch point: ${touchPointTitle}`);
+      }
+    }
   }
 
   const normalizedIssues = unique(issues);
@@ -118,6 +143,16 @@ function hasSuspiciousMixedShortSegment(label: string): boolean {
 
 function isTechnicalLabel(label: string): boolean {
   return /[._\-/:]/.test(label) && /^[a-zA-Z0-9._\-/:]+$/.test(label);
+}
+
+function looksLikeContextArea(textObservation: ImageObservation['textObservations'][number]): boolean {
+  const evidence = [
+    textObservation.locationHint || '',
+    textObservation.reasoning || ''
+  ].join(' ');
+
+  return /\b(swimlane|raia|lane|área|area|dom[ií]nio|domain|sistema|system|agrupador|container|cont[eê]iner|contexto|estrutural|structural)\b/i
+    .test(evidence);
 }
 
 function mentionsVisualConfirmation(reasoning: string): boolean {

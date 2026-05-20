@@ -32,7 +32,12 @@ Prioridade de leitura:
 - verifique se a label tem legibilidade suficiente para ser classificada como evento; caso contrário, coloque em `uncertainItems` e explique a dúvida em `assumptions`
 
 Semântica visual:
-- texto dentro de caixas, cartões, agrupadores, retângulos, swimlanes ou formas estruturais = ponto de contato
+- áreas grandes, domínios, sistemas, swimlanes, agrupadores, contêineres ou raias são estruturas de contexto, não pontos de contato
+- títulos de estruturas de contexto devem ir em `areasDetected` e em `textObservations.kind = area`
+- ponto de contato é somente a caixa operacional interna atravessada pelo fluxo, com label própria dentro da caixa
+- caixas operacionais internas incluem estados, telas, páginas, ações, etapas ou nós de jornada desenhados dentro de uma área maior
+- texto dentro de caixa operacional interna = ponto de contato
+- texto dentro de área grande, domínio, sistema, swimlane, agrupador, contêiner ou raia = área/contexto, não ponto de contato
 - texto dentro de caixa nunca é evento
 - texto fora de formas estruturais = candidato a evento
 - cor próxima de `#FF0000` = `protagonist`
@@ -43,11 +48,14 @@ Semântica visual:
 Regras:
 - responda apenas JSON válido
 - não invente eventos ou fluxos não visíveis
-- `touchPointsDetected` deve conter apenas caixas que realmente participam do fluxo observado
+- `areasDetected` deve conter títulos de áreas grandes, domínios, sistemas, swimlanes, agrupadores, contêineres ou raias visíveis
+- `touchPointsDetected` deve conter apenas labels de caixas operacionais internas que realmente participam do fluxo observado
+- nunca coloque títulos de áreas grandes, domínios, sistemas, swimlanes, agrupadores, contêineres ou raias em `touchPointsDetected`
 - uma caixa só participa do fluxo se houver pelo menos um evento visível fora da caixa claramente associado a ela por proximidade, sequência visual, seta ou continuidade do board
 - se uma caixa não tiver nenhum evento próximo, nenhum evento de saída, nenhum evento de entrada e não fizer parte clara de um fluxo observado, não a inclua em `touchPointsDetected`
 - caixas isoladas ou que parecem apenas estados cadastrais sem eventos associados devem ser descartadas de `touchPointsDetected`
 - só use `touchPointsDetected` para títulos dentro de caixa que tenham relevância operacional no fluxo de eventos
+- se houver uma área grande contendo caixas internas, use a label da caixa interna associada ao evento como touch point; use a label da área grande apenas em `areasDetected`
 - use `textsOutsideShapes` para textos fora de caixa
 - use `textObservations` para registrar todo texto relevante lido, incluindo textos dentro e fora de caixa, com confiança OCR e localização aproximada
 - para textos fora de caixa que pareçam labels técnicas, `textObservations.text` deve ser idêntico ao item correspondente em `textsOutsideShapes`
@@ -78,11 +86,12 @@ Regras:
 Saída:
 {
   "touchPointsDetected": ["string"],
+  "areasDetected": ["string"],
   "textsOutsideShapes": ["string"],
   "textObservations": [
     {
       "text": "string",
-      "kind": "event_candidate | touch_point | structural | uncertain",
+      "kind": "event_candidate | touch_point | area | structural | uncertain",
       "role": "protagonist | supporting | unknown",
       "colorHex": "#FF0000 | #305CDE | unknown",
       "confidence": 0.0,
