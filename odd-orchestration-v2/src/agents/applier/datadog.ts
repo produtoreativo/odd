@@ -2,6 +2,7 @@ import { readJsonFile } from '../../shared/fs.js';
 import { Logger } from '../../shared/logger.js';
 import { buildEnvTag, normalizeEnv } from '../../shared/query-hint.js';
 import { CustomEventPayload, DashboardPlan, EventBurstConfig, EventIngestionResult, MetricIngestionResult, SloSuggestion } from '../../shared/types.js';
+import { CloudEventV1, translateCloudEventsToDatadog } from '../../infrastructure/observability/cloud-events/index.js';
 
 const logger = new Logger('applier-datadog');
 const EVENT_METRIC = 'odd.workflow.event.count';
@@ -11,12 +12,24 @@ const DASHBOARD_WINDOW_SECONDS = 5 * 60;
 const DEFAULT_RANDOM_MAX_COPIES = 5;
 
 export async function readEvents(filePath: string): Promise<CustomEventPayload[]> {
-  const events = await readJsonFile<CustomEventPayload[]>(filePath);
+  const raw = await readJsonFile<unknown>(filePath);
+  const events = isCloudEventArray(raw)
+    ? translateCloudEventsToDatadog(raw)
+    : (raw as CustomEventPayload[]);
   logger.info('Arquivo de eventos carregado', {
     filePath,
-    eventCount: events.length
+    eventCount: events.length,
+    format: isCloudEventArray(raw) ? 'cloudevents-1.0' : 'datadog-native'
   });
   return events;
+}
+
+function isCloudEventArray(value: unknown): value is CloudEventV1[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && typeof value[0] === 'object'
+    && value[0] !== null
+    && (value[0] as { specversion?: unknown }).specversion === '1.0';
 }
 
 export async function ingestEvents(

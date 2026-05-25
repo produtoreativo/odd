@@ -20,6 +20,14 @@ npm run start -- \
   --output ./generated \
   --env dev \
   --provider bedrock
+
+
+npm run start -- \
+  --input-image samples/schola.png \
+  --workflow-key schola \
+  --output ./generated \
+  --env dev \
+  --provider bedrock
 ```
 
 Cada execução grava os artefatos em uma pasta versionada:

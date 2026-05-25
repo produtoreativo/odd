@@ -1,3 +1,5 @@
+export type WorkflowStepArg = 'input' | 'categorize' | 'slos' | 'openslo' | 'plan' | 'terraform' | 'apply';
+
 export type WorkflowCliArgs = {
   input?: string;
   output: string;
@@ -5,8 +7,8 @@ export type WorkflowCliArgs = {
   dashboardTitle?: string;
   dashboardKey?: string;
   provider: string;
-  startFrom: 'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply';
-  endAt: 'input' | 'categorize' | 'slos' | 'plan' | 'terraform' | 'apply';
+  startFrom: WorkflowStepArg;
+  endAt: WorkflowStepArg;
   dryRun: boolean;
   rowsFile?: string;
   categorizedFile?: string;
@@ -72,17 +74,27 @@ function parseOptionalIntegerArg(args: Record<string, string | boolean>, key: st
   return parsed;
 }
 
+const VALID_STEPS: ReadonlySet<WorkflowStepArg> = new Set([
+  'input',
+  'categorize',
+  'slos',
+  'openslo',
+  'plan',
+  'terraform',
+  'apply'
+]);
+
 function parseStepArg(
   value: string | boolean | undefined,
-  fallback: WorkflowCliArgs['startFrom']
-): WorkflowCliArgs['startFrom'] {
+  fallback: WorkflowStepArg
+): WorkflowStepArg {
   if (typeof value !== 'string' || value.trim() === '') {
     return fallback;
   }
 
-  if (value === 'input' || value === 'categorize' || value === 'slos' || value === 'plan' || value === 'terraform' || value === 'apply') {
-    return value;
+  if ((VALID_STEPS as ReadonlySet<string>).has(value)) {
+    return value as WorkflowStepArg;
   }
 
-  throw new Error(`Etapa inválida: ${value}`);
+  throw new RangeError(`Etapa inválida: ${value}`);
 }

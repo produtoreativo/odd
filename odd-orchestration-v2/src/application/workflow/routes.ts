@@ -7,6 +7,8 @@ export function routeFromStart(state: ObservabilityWorkflowState) {
       return 'categorize_events';
     case 'slos':
       return 'suggest_slos';
+    case 'openslo':
+      return 'compose_openslo_datasources';
     case 'plan':
       return 'build_plan';
     case 'terraform':
@@ -27,7 +29,11 @@ export function routeAfterCategorize(state: ObservabilityWorkflowState) {
 }
 
 export function routeAfterSlos(state: ObservabilityWorkflowState) {
-  return state.endAt === 'slos' ? END : 'build_plan';
+  return state.endAt === 'slos' ? END : 'compose_openslo_datasources';
+}
+
+export function routeAfterOpenSloAlertPolicies(state: ObservabilityWorkflowState) {
+  return state.endAt === 'openslo' ? END : 'build_plan';
 }
 
 export function routeAfterPlan(state: ObservabilityWorkflowState) {

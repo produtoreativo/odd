@@ -1,10 +1,21 @@
 import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { applyDatadog, applyDynatrace, applyTerraformOnly } from '../../agents/applier/index.js';
-import { buildDatadogSloTerraform } from '../../infrastructure/observability/datadog-slo-terraform.js';
 import { buildDatadogDashboardTerraform } from '../../infrastructure/observability/datadog-dashboard-terraform.js';
 import { buildDynatraceDashboardTerraform } from '../../infrastructure/observability/dynatrace-dashboard-terraform.js';
 import { buildGrafanaDashboardTerraform } from '../../infrastructure/observability/grafana-dashboard-terraform.js';
+import {
+  encodeOpenSloAlertConditions,
+  encodeOpenSloAlertNotificationTargets,
+  encodeOpenSloAlertPolicies,
+  encodeOpenSloDataSources,
+  encodeOpenSloService,
+  encodeOpenSloSlis,
+  encodeOpenSloSlos,
+  translateOpenSloToDatadogTerraform,
+  translateOpenSloToDynatraceTerraform
+} from '../../infrastructure/observability/openslo/index.js';
+import { encodePlanToCloudEvents } from '../../infrastructure/observability/cloud-events/index.js';
 import { DashboardPlanSchema, CategorizedEventsSchema, SloSuggestionSchema } from '../../domain/contracts.js';
 import { renderPrompt } from '../../infrastructure/filesystem/prompt-repository.js';
 import { BedrockJsonAgent, parseBedrockJsonResponse } from '../../infrastructure/llm/bedrock-json-agent.js';
@@ -126,6 +137,102 @@ export async function suggestSlosNode(state: ObservabilityWorkflowState) {
   }
 }
 
+function buildOpenSloContext(state: ObservabilityWorkflowState) {
+  return {
+    dashboardKey: state.dashboardKey,
+    dashboardTitle: state.dashboardTitle,
+    env: state.env,
+    provider: state.provider as 'datadog' | 'dynatrace' | 'grafana'
+  };
+}
+
+export async function composeOpenSloDataSourcesNode(state: ObservabilityWorkflowState) {
+  const openSloDataSources = encodeOpenSloDataSources(buildOpenSloContext(state));
+  logger.info('Etapa openslo.datasources concluída', { count: openSloDataSources.length });
+  return { openSloDataSources };
+}
+
+export async function composeOpenSloServiceNode(state: ObservabilityWorkflowState) {
+  const planForService = state.plan ?? buildPlaceholderPlanForService(state);
+  const openSloService = encodeOpenSloService(planForService, buildOpenSloContext(state));
+  logger.info('Etapa openslo.service concluída', { name: openSloService.metadata.name });
+  return { openSloService };
+}
+
+export async function composeOpenSloSlisNode(state: ObservabilityWorkflowState) {
+  const openSloSlis = encodeOpenSloSlis(state.sloSuggestions, buildOpenSloContext(state));
+  logger.info('Etapa openslo.slis concluída', { count: openSloSlis.length });
+  return { openSloSlis };
+}
+
+export async function composeOpenSloSlosNode(state: ObservabilityWorkflowState) {
+  const openSloSlos = encodeOpenSloSlos(state.sloSuggestions, state.openSloSlis, buildOpenSloContext(state));
+  logger.info('Etapa openslo.slos concluída', { count: openSloSlos.length });
+  return { openSloSlos };
+}
+
+export async function composeOpenSloAlertConditionsNode(state: ObservabilityWorkflowState) {
+  const openSloAlertConditions = encodeOpenSloAlertConditions(state.sloSuggestions, buildOpenSloContext(state));
+  logger.info('Etapa openslo.alert_conditions concluída', { count: openSloAlertConditions.length });
+  return { openSloAlertConditions };
+}
+
+export async function composeOpenSloAlertNotificationTargetsNode(state: ObservabilityWorkflowState) {
+  const openSloAlertNotificationTargets = encodeOpenSloAlertNotificationTargets(buildOpenSloContext(state));
+  logger.info('Etapa openslo.alert_notification_targets concluída', { count: openSloAlertNotificationTargets.length });
+  return { openSloAlertNotificationTargets };
+}
+
+export async function composeOpenSloAlertPoliciesNode(state: ObservabilityWorkflowState) {
+  const openSloAlertPolicies = encodeOpenSloAlertPolicies(
+    state.sloSuggestions,
+    state.openSloAlertConditions,
+    state.openSloAlertNotificationTargets,
+    buildOpenSloContext(state)
+  );
+  logger.info('Etapa openslo.alert_policies concluída', { count: openSloAlertPolicies.length });
+  return { openSloAlertPolicies };
+}
+
+export function collectOpenSloDocuments(state: ObservabilityWorkflowState) {
+  if (state.openSloSlis.length === 0 && state.plan) {
+    const context = buildOpenSloContext(state);
+    const slis = encodeOpenSloSlis(state.plan.sloSuggestions, context);
+    const slos = encodeOpenSloSlos(state.plan.sloSuggestions, slis, context);
+    const conditions = encodeOpenSloAlertConditions(state.plan.sloSuggestions, context);
+    const targets = encodeOpenSloAlertNotificationTargets(context);
+    const policies = encodeOpenSloAlertPolicies(state.plan.sloSuggestions, conditions, targets, context);
+    return [
+      ...encodeOpenSloDataSources(context),
+      encodeOpenSloService(state.plan, context),
+      ...slis,
+      ...slos,
+      ...conditions,
+      ...targets,
+      ...policies
+    ];
+  }
+  return [
+    ...state.openSloDataSources,
+    ...(state.openSloService ? [state.openSloService] : []),
+    ...state.openSloSlis,
+    ...state.openSloSlos,
+    ...state.openSloAlertConditions,
+    ...state.openSloAlertNotificationTargets,
+    ...state.openSloAlertPolicies
+  ];
+}
+
+function buildPlaceholderPlanForService(state: ObservabilityWorkflowState): DashboardPlan {
+  return {
+    dashboardTitle: state.dashboardTitle,
+    bands: [],
+    customEvents: [],
+    sloSuggestions: state.sloSuggestions,
+    assumptions: []
+  };
+}
+
 export async function buildPlanNode(state: ObservabilityWorkflowState) {
   if (!state.categorized) {
     throw new Error('Estado inválido: categorized ausente.');
@@ -231,9 +338,15 @@ export async function compileSloTerraformNode(state: ObservabilityWorkflowState)
     terraformWorkspaceDir: state.terraformWorkspaceDir
   });
 
+  const openSloDocuments = collectOpenSloDocuments(state);
   const sloTerraformJson = state.provider === 'datadog'
-    ? await buildDatadogSloTerraform(state.plan, state.dashboardKey, state.env)
-    : {};
+    ? translateOpenSloToDatadogTerraform(openSloDocuments, {
+      dashboardKey: state.dashboardKey,
+      dashboardTitle: state.plan.dashboardTitle
+    })
+    : state.provider === 'dynatrace'
+      ? translateOpenSloToDynatraceTerraform(openSloDocuments, { dashboardKey: state.dashboardKey })
+      : {};
   const terraformJson = mergeTerraformJson(state.dashboardTerraformJson, sloTerraformJson);
 
   const terraformArtifactPath = await writeTerraformWorkspaceArtifact(
@@ -271,9 +384,15 @@ export async function applyProviderNode(state: ObservabilityWorkflowState) {
 
   await ensureDir(state.outputDir);
   const planFile = path.join(state.outputDir, 'plan.json');
-  const eventsFile = path.join(state.outputDir, 'custom-events.json');
+  const eventsFile = path.join(state.outputDir, 'cloud-events.json');
+  const legacyEventsFile = path.join(state.outputDir, 'custom-events.json');
   await writeJsonFile(planFile, state.plan);
-  await writeFile(eventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
+  const cloudEvents = encodePlanToCloudEvents(state.plan, {
+    dashboardKey: state.dashboardKey,
+    env: state.env
+  });
+  await writeFile(eventsFile, `${JSON.stringify(cloudEvents, null, 2)}\n`, 'utf-8');
+  await writeFile(legacyEventsFile, `${JSON.stringify(state.plan.customEvents, null, 2)}\n`, 'utf-8');
 
   const applyReport = state.provider === 'datadog'
     ? await (async () => {
@@ -293,7 +412,8 @@ export async function applyProviderNode(state: ObservabilityWorkflowState) {
         terraformDir: state.terraformWorkspaceDir,
         eventsFile,
         outputDir: state.outputDir,
-        dryRun: state.dryRun
+        dryRun: state.dryRun,
+        env: state.env
       })
     : await applyTerraformOnly({
       provider: state.provider,

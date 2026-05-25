@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { writeFile } from 'node:fs/promises';
 import { buildObservabilityWorkflow } from './workflow/build-observability-workflow.js';
 import { prepareTerraformWorkspace } from '../infrastructure/terraform/workspace.js';
 import { buildDashboardKey } from '../shared/dashboard-identity.js';
@@ -6,6 +7,16 @@ import { readPlanningInputContract } from '../shared/input.js';
 import { buildFlowOccurrences } from '../shared/flow-occurrences.js';
 import { buildEventQueryHint, normalizeEnv } from '../shared/query-hint.js';
 import { ensureDir, readJsonFile, writeJsonFile } from '../infrastructure/filesystem/file-system.js';
+import {
+  encodePlanToCloudEvents,
+  translateCloudEventsToDatadog,
+  translateCloudEventsToDynatrace
+} from '../infrastructure/observability/cloud-events/index.js';
+import {
+  composeOpenSloBundle,
+  OpenSloDocument,
+  stringifyYamlDocuments
+} from '../infrastructure/observability/openslo/index.js';
 import { Logger } from '../shared/logger.js';
 import { ApplyReport, CategorizedEvents, DashboardPlan, EventBurstConfig, EventStormingRow, FlowOccurrence, RecognizedFlow, SloSuggestion } from '../shared/types.js';
 import { WorkflowCliArgs } from '../shared/args.js';
@@ -70,7 +81,18 @@ export async function runObservabilityWorkflow(args: WorkflowCliArgs): Promise<v
     sloTerraformJson: null
   });
 
-  await persistArtifacts(outputDir, provider, inputName, dashboardTitle, dashboardKey, terraformWorkspaceDir, result);
+  await persistArtifacts(
+    {
+      outputDir,
+      provider,
+      inputName,
+      dashboardTitle,
+      dashboardKey,
+      terraformWorkspaceDir,
+      env
+    },
+    result
+  );
 
   logger.info('Workflow v2 finalizado', {
     outputDir,
@@ -200,24 +222,39 @@ async function loadPreloadedState(
   };
 }
 
+type PersistArtifactsContext = {
+  outputDir: string;
+  provider: 'datadog' | 'dynatrace' | 'grafana';
+  inputName: string;
+  dashboardTitle: string;
+  dashboardKey: string;
+  terraformWorkspaceDir: string;
+  env: string;
+};
+
+type PersistArtifactsResult = {
+  rows: EventStormingRow[];
+  categorized: CategorizedEvents | null;
+  sloSuggestions: SloSuggestion[];
+  openSloDataSources: OpenSloDocument[];
+  openSloService: OpenSloDocument | null;
+  openSloSlis: OpenSloDocument[];
+  openSloSlos: OpenSloDocument[];
+  openSloAlertConditions: OpenSloDocument[];
+  openSloAlertNotificationTargets: OpenSloDocument[];
+  openSloAlertPolicies: OpenSloDocument[];
+  plan: DashboardPlan | null;
+  dashboardTerraformJson: Record<string, unknown> | null;
+  sloTerraformJson: Record<string, unknown> | null;
+  terraformJson: Record<string, unknown> | null;
+  applyReport: ApplyReport | null;
+};
+
 async function persistArtifacts(
-  outputDir: string,
-  provider: 'datadog' | 'dynatrace' | 'grafana',
-  inputName: string,
-  dashboardTitle: string,
-  dashboardKey: string,
-  terraformWorkspaceDir: string,
-  result: {
-    rows: EventStormingRow[];
-    categorized: CategorizedEvents | null;
-    sloSuggestions: SloSuggestion[];
-    plan: DashboardPlan | null;
-    dashboardTerraformJson: Record<string, unknown> | null;
-    sloTerraformJson: Record<string, unknown> | null;
-    terraformJson: Record<string, unknown> | null;
-    applyReport: ApplyReport | null;
-  }
+  context: PersistArtifactsContext,
+  result: PersistArtifactsResult
 ) {
+  const { outputDir, provider, inputName, dashboardTitle, dashboardKey, terraformWorkspaceDir, env } = context;
   if (result.rows.length > 0) {
     await writeJsonFile(path.join(outputDir, 'rows.json'), result.rows);
   }
@@ -226,7 +263,9 @@ async function persistArtifacts(
     dashboardTitle: result.plan?.dashboardTitle ?? dashboardTitle,
     provider,
     inputName,
-    terraformWorkspaceDir
+    terraformWorkspaceDir,
+    eventFormats: ['cloudevents-1.0', `${provider}-native`],
+    sloFormats: ['openslo-v1', `${provider}-native`]
   });
   if (result.categorized) {
     await writeJsonFile(path.join(outputDir, 'categorized-events.json'), result.categorized);
@@ -236,8 +275,9 @@ async function persistArtifacts(
   }
   if (result.plan) {
     await writeJsonFile(path.join(outputDir, 'plan.json'), result.plan);
-    await writeJsonFile(path.join(outputDir, 'custom-events.json'), result.plan.customEvents);
+    await persistCanonicalEvents(outputDir, dashboardKey, env, result.plan);
   }
+  await persistOpenSloEntities(outputDir, { dashboardKey, dashboardTitle: result.plan?.dashboardTitle ?? dashboardTitle, env, provider }, result);
   if (result.dashboardTerraformJson) {
     await writeJsonFile(path.join(outputDir, `${provider}-dashboard.auto.tf.json`), result.dashboardTerraformJson);
   }
@@ -255,6 +295,129 @@ async function persistArtifacts(
     await writeJsonFile(path.join(outputDir, 'apply-report.json'), result.applyReport);
   }
 }
+
+async function persistCanonicalEvents(
+  outputDir: string,
+  dashboardKey: string,
+  env: string,
+  plan: DashboardPlan
+) {
+  const cloudEvents = encodePlanToCloudEvents(plan, { dashboardKey, env });
+  const datadogEvents = translateCloudEventsToDatadog(cloudEvents);
+  const dynatraceBizEvents = translateCloudEventsToDynatrace(cloudEvents);
+
+  await writeJsonFile(path.join(outputDir, 'cloud-events.json'), cloudEvents);
+  await writeJsonFile(path.join(outputDir, 'datadog-events.json'), datadogEvents);
+  await writeJsonFile(path.join(outputDir, 'dynatrace-bizevents.json'), dynatraceBizEvents);
+  await writeJsonFile(path.join(outputDir, 'custom-events.json'), datadogEvents);
+}
+
+type OpenSloPersistContext = {
+  dashboardKey: string;
+  dashboardTitle: string;
+  env: string;
+  provider: 'datadog' | 'dynatrace' | 'grafana';
+};
+
+const OPENSLO_ENTITY_FILES: Array<{
+  file: string;
+  select: (result: PersistArtifactsResult) => OpenSloDocument[];
+}> = [
+  { file: 'datasources', select: (r) => r.openSloDataSources },
+  { file: 'service', select: (r) => (r.openSloService ? [r.openSloService] : []) },
+  { file: 'slis', select: (r) => r.openSloSlis },
+  { file: 'slos', select: (r) => r.openSloSlos },
+  { file: 'alert-conditions', select: (r) => r.openSloAlertConditions },
+  { file: 'alert-notification-targets', select: (r) => r.openSloAlertNotificationTargets },
+  { file: 'alert-policies', select: (r) => r.openSloAlertPolicies }
+];
+
+async function persistOpenSloEntities(
+  outputDir: string,
+  context: OpenSloPersistContext,
+  result: PersistArtifactsResult
+) {
+  const hasComposed = result.openSloService !== null
+    || result.openSloDataSources.length > 0
+    || result.openSloSlis.length > 0;
+
+  const bundle = hasComposed
+    ? collectBundleFromResult(result)
+    : result.plan
+      ? composeOpenSloBundle(result.plan, {
+        dashboardKey: context.dashboardKey,
+        dashboardTitle: context.dashboardTitle,
+        env: context.env,
+        provider: context.provider
+      })
+      : [];
+
+  if (bundle.length === 0) return;
+
+  const opensloDir = path.join(outputDir, 'openslo');
+  await ensureDir(opensloDir);
+
+  const effectiveResult = hasComposed
+    ? result
+    : indexBundleByKind(bundle);
+
+  for (const entity of OPENSLO_ENTITY_FILES) {
+    const docs = entity.select(effectiveResult);
+    await writeJsonFile(path.join(opensloDir, `${entity.file}.json`), docs);
+    await writeFile(
+      path.join(opensloDir, `${entity.file}.yaml`),
+      stringifyYamlDocuments(docs as unknown as Parameters<typeof stringifyYamlDocuments>[0]),
+      'utf-8'
+    );
+  }
+
+  await writeJsonFile(path.join(opensloDir, 'bundle.json'), bundle);
+  await writeFile(
+    path.join(opensloDir, 'bundle.yaml'),
+    stringifyYamlDocuments(bundle as unknown as Parameters<typeof stringifyYamlDocuments>[0]),
+    'utf-8'
+  );
+
+  await writeJsonFile(path.join(outputDir, 'openslo.json'), bundle);
+  await writeFile(
+    path.join(outputDir, 'openslo.yaml'),
+    stringifyYamlDocuments(bundle as unknown as Parameters<typeof stringifyYamlDocuments>[0]),
+    'utf-8'
+  );
+}
+
+function collectBundleFromResult(result: PersistArtifactsResult): OpenSloDocument[] {
+  return [
+    ...result.openSloDataSources,
+    ...(result.openSloService ? [result.openSloService] : []),
+    ...result.openSloSlis,
+    ...result.openSloSlos,
+    ...result.openSloAlertConditions,
+    ...result.openSloAlertNotificationTargets,
+    ...result.openSloAlertPolicies
+  ];
+}
+
+function indexBundleByKind(bundle: OpenSloDocument[]): PersistArtifactsResult {
+  return {
+    rows: [],
+    categorized: null,
+    sloSuggestions: [],
+    openSloDataSources: bundle.filter((doc) => doc.kind === 'DataSource'),
+    openSloService: bundle.find((doc) => doc.kind === 'Service') ?? null,
+    openSloSlis: bundle.filter((doc) => doc.kind === 'SLI'),
+    openSloSlos: bundle.filter((doc) => doc.kind === 'SLO'),
+    openSloAlertConditions: bundle.filter((doc) => doc.kind === 'AlertCondition'),
+    openSloAlertNotificationTargets: bundle.filter((doc) => doc.kind === 'AlertNotificationTarget'),
+    openSloAlertPolicies: bundle.filter((doc) => doc.kind === 'AlertPolicy'),
+    plan: null,
+    dashboardTerraformJson: null,
+    sloTerraformJson: null,
+    terraformJson: null,
+    applyReport: null
+  };
+}
+
 
 function inferDashboardTitle(input: string | undefined, startFrom: string): string {
   if (input) {

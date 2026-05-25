@@ -1,23 +1,18 @@
-import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { CustomEventPayload } from '../../shared/types.js';
+import {
+  CloudEventV1,
+  DynatraceBizEvent,
+  translateCloudEventsToDynatrace
+} from '../../infrastructure/observability/cloud-events/index.js';
+import { encodeCustomEvent } from '../../infrastructure/observability/cloud-events/encoder.js';
+import { normalizeEnv } from '../../shared/query-hint.js';
 
 export type DynatraceEventIngestionResult = {
   title: string;
   status: 'sent' | 'dry-run' | 'failed';
   response?: unknown;
   error?: string;
-};
-
-type DynatraceBizEventData = Record<string, string | number | boolean>;
-
-type DynatraceCloudEvent = {
-  specversion: '1.0';
-  id: string;
-  source: string;
-  type: string;
-  time: string;
-  data: DynatraceBizEventData;
 };
 
 type DynatraceAuth = {
@@ -27,19 +22,19 @@ type DynatraceAuth = {
 
 type DynatraceIngestionOptions = {
   payloadFile?: string;
+  dashboardKey?: string;
+  env?: string;
 };
 
-function tagValue(tags: string[], prefix: string): string | undefined {
-  return tags.find((tag) => tag.startsWith(prefix))?.slice(prefix.length);
-}
+const CLOUD_EVENT_SOURCE_PREFIX = 'odd:orchestration:v2';
 
-function resolveManagementZone(event: CustomEventPayload): string | undefined {
-  return tagValue(event.tags, 'dynatrace.management_zone:') ?? process.env.DYNATRACE_MANAGEMENT_ZONE;
-}
-
-export async function readEvents(filePath: string): Promise<CustomEventPayload[]> {
+export async function readEvents(filePath: string): Promise<unknown[]> {
   const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content) as CustomEventPayload[];
+  const parsed = JSON.parse(content);
+  if (!Array.isArray(parsed)) {
+    throw new TypeError(`Arquivo ${filePath} não contém um array.`);
+  }
+  return parsed;
 }
 
 export async function ingestEvents(
@@ -47,14 +42,16 @@ export async function ingestEvents(
   dryRun: boolean,
   options: DynatraceIngestionOptions = {}
 ): Promise<DynatraceEventIngestionResult[]> {
-  const events = await readEvents(filePath);
-  const payload = events.map(toDynatraceCloudEventPayload);
+  const raw = await readEvents(filePath);
+  const cloudEvents = ensureCloudEvents(raw, options);
+  const payload = translateCloudEventsToDynatrace(cloudEvents);
+
   if (options.payloadFile) {
     await writeFile(options.payloadFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
   }
 
   if (dryRun) {
-    return events.map((event) => ({ title: event.title, status: 'dry-run' }));
+    return cloudEvents.map((event) => ({ title: event.type, status: 'dry-run' }));
   }
 
   const results: DynatraceEventIngestionResult[] = [];
@@ -74,62 +71,44 @@ export async function ingestEvents(
   return results;
 }
 
+function ensureCloudEvents(
+  raw: unknown[],
+  options: DynatraceIngestionOptions
+): CloudEventV1[] {
+  if (raw.length === 0) return [];
+
+  if (isCloudEventArray(raw)) {
+    return raw;
+  }
+
+  const dashboardKey = options.dashboardKey ?? 'odd-dashboard';
+  const env = normalizeEnv(options.env);
+  const source = `${CLOUD_EVENT_SOURCE_PREFIX}/${dashboardKey}`;
+  return (raw as CustomEventPayload[]).map((event) => encodeCustomEvent(event, {
+    dashboardKey,
+    env,
+    source
+  }));
+}
+
+function isCloudEventArray(value: unknown[]): value is CloudEventV1[] {
+  const first = value[0];
+  return typeof first === 'object'
+    && first !== null
+    && (first as { specversion?: unknown }).specversion === '1.0';
+}
+
 function resolveBatchSize(): number {
   const parsed = Number.parseInt(process.env.DYNATRACE_BIZEVENTS_BATCH_SIZE ?? '100', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
 
-function chunkEvents(events: DynatraceCloudEvent[], batchSize: number): DynatraceCloudEvent[][] {
-  const chunks: DynatraceCloudEvent[][] = [];
+function chunkEvents(events: DynatraceBizEvent[], batchSize: number): DynatraceBizEvent[][] {
+  const chunks: DynatraceBizEvent[][] = [];
   for (let index = 0; index < events.length; index += batchSize) {
     chunks.push(events.slice(index, index + batchSize));
   }
   return chunks;
-}
-
-function appendTagFields(data: DynatraceBizEventData, event: CustomEventPayload): void {
-  for (const tag of event.tags) {
-    const [key, ...rest] = tag.split(':');
-    if (!key || rest.length === 0) continue;
-    data[`odd.tag.${key}`] = rest.join(':');
-  }
-}
-
-function toDynatraceCloudEventPayload(event: CustomEventPayload): DynatraceCloudEvent {
-  const isError = event.alert_type === 'error' || event.tags.includes('exception:true') || event.tags.includes('outcome:problem');
-  const provider = process.env.DYNATRACE_BIZEVENT_PROVIDER || 'odd-orchestration-v2';
-  const data: DynatraceBizEventData = {
-    title: event.title,
-    text: event.text,
-    'odd.alert_type': event.alert_type ?? (isError ? 'error' : 'info'),
-    'odd.is_error': isError,
-    'odd.source': 'odd'
-  };
-
-  if (event.priority) {
-    data['odd.priority'] = event.priority;
-  }
-  if (event.aggregation_key) {
-    data['odd.aggregation_key'] = event.aggregation_key;
-  }
-  if (event.source_type_name) {
-    data['odd.source_type_name'] = event.source_type_name;
-  }
-
-  const managementZone = resolveManagementZone(event);
-  if (managementZone) {
-    data['odd.management_zone'] = managementZone;
-  }
-
-  appendTagFields(data, event);
-  return {
-    specversion: '1.0',
-    id: randomUUID(),
-    source: provider,
-    type: event.title,
-    time: new Date().toISOString(),
-    data
-  };
 }
 
 function resolveAuth(): DynatraceAuth | undefined {
@@ -159,7 +138,7 @@ function buildDynatraceError(status: number, responseText: string, titles: strin
   return new Error(`Erro ao enviar batch de Business Events para Dynatrace (${titles}): ${status} ${responseText}.${scopeHint}`);
 }
 
-async function sendEventsBatch(payload: DynatraceCloudEvent[]): Promise<unknown> {
+async function sendEventsBatch(payload: DynatraceBizEvent[]): Promise<unknown> {
   const envUrl = process.env.DYNATRACE_ENV_URL;
   const auth = resolveAuth();
 
@@ -192,3 +171,4 @@ async function sendEventsBatch(payload: DynatraceCloudEvent[]): Promise<unknown>
   const responseText = await response.text();
   return responseText ? JSON.parse(responseText) : { status: response.status };
 }
+

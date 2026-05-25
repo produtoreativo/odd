@@ -58,7 +58,8 @@ async function main(): Promise<void> {
         terraformDir,
         eventsFile: eventsFile!,
         outputDir,
-        dryRun
+        dryRun,
+        env: typeof args.env === 'string' ? args.env : undefined
       })
     : await applyTerraformOnly({
       provider,
@@ -216,6 +217,7 @@ export async function applyDynatrace(args: {
   eventsFile: string;
   outputDir: string;
   dryRun: boolean;
+  env?: string;
 }): Promise<TerraformApplyReport> {
   await ensureDir(args.outputDir);
   logger.info('Iniciando applier Dynatrace', args);
@@ -254,7 +256,11 @@ export async function applyDynatrace(args: {
     dryRun: args.dryRun
   });
   const payloadFile = path.join(args.outputDir, 'dynatrace-bizevents-payload.json');
-  const ingestedEvents = await ingestDynatraceEvents(args.eventsFile, args.dryRun, { payloadFile });
+  const ingestedEvents = await ingestDynatraceEvents(args.eventsFile, args.dryRun, {
+    payloadFile,
+    dashboardKey: args.dashboardKey,
+    env: args.env
+  });
   const failedEventsCount = ingestedEvents.filter((event) => event.status === 'failed').length;
   logger.info('Ingestão de eventos Dynatrace concluída', {
     ingestedEvents: ingestedEvents.length,

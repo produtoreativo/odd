@@ -36,11 +36,21 @@ O workflow possui estas etapas:
 
 1. `input`: leitura e normalização da entrada
 2. `categorize`: separação dos eventos em `problems` e `normal`
-3. `slos`: sugestão de 3 a 5 SLOs
-4. `plan`: geração do `plan.json`
-5. `terraform`: compilação do Terraform do dashboard
-6. `slo_terraform`: compilação do Terraform dos SLOs sugeridos
-7. `apply`: `terraform init` e `terraform apply` para todos os providers; no Datadog também executa envio dos eventos em batch e das métricas sintéticas dos SLOs
+3. `slos`: sugestão de 3 a 5 SLOs (LLM)
+4. `openslo`: composição determinística do bundle OpenSLO v1 — encadeia 7 sub-nodes, um por entidade:
+   1. `compose_openslo_datasources` — `DataSource` por provider
+   2. `compose_openslo_service` — `Service` único do dashboard
+   3. `compose_openslo_slis` — `SLI` por sugestão
+   4. `compose_openslo_slos` — `SLO` referenciando o SLI via `indicatorRef`
+   5. `compose_openslo_alert_conditions` — `AlertCondition` por SLO em duas janelas (1h/6h burn-rate)
+   6. `compose_openslo_alert_notification_targets` — `AlertNotificationTarget` (email + slack default)
+   7. `compose_openslo_alert_policies` — `AlertPolicy` ligando conditions a targets
+5. `plan`: geração do `plan.json`
+6. `terraform`: compilação do Terraform do dashboard
+7. `slo_terraform`: compilação do Terraform dos SLOs (deriva do bundle OpenSLO)
+8. `apply`: `terraform init` e `terraform apply` para todos os providers; no Datadog também executa envio dos eventos em batch e das métricas sintéticas dos SLOs
+
+Para parar a execução após a composição OpenSLO sem gerar o `plan.json`, use `--end-at openslo`.
 
 Na CLI, `--end-at terraform` continua representando o fechamento do bundle Terraform completo. Internamente o workflow passa por dashboard Terraform e SLO Terraform antes de encerrar ou aplicar.
 
@@ -224,12 +234,34 @@ Cada execução grava um diretório em `generated/` com os artefatos produzidos 
 - `categorized-events.json`
 - `slo-suggestions.json`
 - `plan.json`
-- `custom-events.json`
+- `cloud-events.json` — eventos canônicos no padrão CloudEvents 1.0
+- `openslo.json` e `openslo.yaml` — bundle completo OpenSLO v1 (atalho equivalente a `openslo/bundle.{json,yaml}`)
+- `openslo/` — uma pasta com um arquivo por entidade OpenSLO v1, em JSON e YAML:
+  - `datasources.{json,yaml}` — `DataSource` por provider
+  - `service.{json,yaml}` — `Service`
+  - `slis.{json,yaml}` — `SLI`
+  - `slos.{json,yaml}` — `SLO` (com `indicatorRef`)
+  - `alert-conditions.{json,yaml}` — `AlertCondition` multi-window burn rate
+  - `alert-notification-targets.{json,yaml}` — `AlertNotificationTarget`
+  - `alert-policies.{json,yaml}` — `AlertPolicy`
+  - `bundle.{json,yaml}` — todos os documentos concatenados
+- `datadog-events.json` — tradução dos CloudEvents para o formato do endpoint `/api/v1/events` do Datadog
+- `dynatrace-bizevents.json` — tradução dos CloudEvents para o batch CloudEvents do `api/v2/bizevents/ingest` do Dynatrace
+- `custom-events.json` — alias do `datadog-events.json` mantido por compatibilidade
 - `<provider>-dashboard.auto.tf.json`
 - `<provider>-slos.auto.tf.json` quando houver suporte de provider
 - `<provider>-bundle.auto.tf.json`
 - `dashboard-metadata.json`
 - `apply-report.json` quando a etapa `apply` for executada
+
+### Formatos canônicos e tradução por provider
+
+- **Eventos**: `cloud-events.json` é a fonte de verdade no padrão CloudEvents 1.0.
+  - Dynatrace aceita CloudEvents nativamente em `application/cloudevents-batch+json`; o `dynatrace-bizevents.json` adiciona apenas as extensões `odd.*` em `data` (campos achatados a partir das tags) exigidas pelo schema de BizEvents.
+  - Datadog não aceita CloudEvents no endpoint de eventos; o `datadog-events.json` é a tradução proprietária com `title`/`text`/`tags`/`alert_type` necessária para `/api/v1/events`.
+- **SLOs**: `openslo.json` e `openslo.yaml` são a fonte de verdade no padrão OpenSLO v1 (`Service` + `SLO` ratio/threshold).
+  - Datadog não aceita OpenSLO; o `<provider>-slos.auto.tf.json` traduz para `datadog_service_level_objective` (`type = "metric"`).
+  - Dynatrace também não aceita OpenSLO; quando o provider é `dynatrace`, o `<provider>-slos.auto.tf.json` traduz para `dynatrace_slo` com `metric_expression` baseado em `builtin:bizevents.count`/`builtin:bizevents.duration` filtrado por `odd.dashboard_key`/`odd.env`/`odd.slo_id`.
 
 Quando houver `apply`, o relatório inclui:
 
