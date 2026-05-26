@@ -2,9 +2,12 @@ import path from 'node:path';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import {
   CandidateContextSchema,
+  CandidateContext,
   ImageObservation,
   ImageObservationSchema,
   NormalizationReviewSchema,
+  OcrObservation,
+  OcrObservationSchema,
   PROJECT_FORMAT_COLUMNS,
   REQUIRED_COLUMNS,
   WorkbookSchema
@@ -12,7 +15,7 @@ import {
 import { Logger } from '../../shared/logger.js';
 import { formatError } from '../../shared/errors.js';
 import { renderPrompt } from '../../infrastructure/filesystem/prompt-repository.js';
-import { buildChatModel } from '../../infrastructure/llm/chat-model-factory.js';
+import { buildChatModel, ModelUsage } from '../../infrastructure/llm/chat-model-factory.js';
 import { imageContentFromFile } from '../../infrastructure/llm/image-message.js';
 import { extractRawResponseText, parseJsonResponse } from '../../infrastructure/llm/json-response-parser.js';
 import {
@@ -29,13 +32,69 @@ import {
   validateRecognizedContext,
   validateWorkbook
 } from '../../domain/context-validator.js';
-import { WorkflowGraphState } from './state.js';
+import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
+import { recognizeTechnicalLabels } from '../../infrastructure/ocr/technical-label-ocr.js';
 
 const logger = new Logger('workflow-nodes');
 
+export async function prepareImageOcrNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó prepare_image_ocr', {
+    inputImage: state.inputImage
+  });
+
+  const execute = traceStep(
+    async () => {
+      try {
+        const ocrObservation = OcrObservationSchema.parse(await recognizeTechnicalLabels(state.inputImage, {
+          outputDir: state.outputDir
+        }));
+        await persistStageJson(state.outputDir, '00-ocr-observation.json', ocrObservation);
+
+        logger.info('Nó prepare_image_ocr concluído com sucesso', {
+          textCount: ocrObservation.texts.length
+        });
+
+        return {
+          ocrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_image_ocr', startedAt)
+        };
+      } catch (error) {
+        const message = formatError(error);
+        logger.warn('Falha no OCR técnico; workflow continuará apenas com observação multimodal', {
+          error: message
+        });
+
+        const ocrObservation = OcrObservationSchema.parse({
+          inputImage: state.inputImage,
+          texts: [],
+          assumptions: [`OCR técnico não executado com sucesso: ${message}`]
+        });
+        await persistStageJson(state.outputDir, '00-ocr-observation.json', ocrObservation);
+
+        return {
+          ocrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_image_ocr', startedAt)
+        };
+      }
+    },
+    {
+      name: 'prepare_image_ocr_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
 export async function observeImageNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const attempt = state.observeAttempts + 1;
   const feedback = state.observeAttempts > 0 ? state.observeFeedback : 'Nenhum.';
   logger.info('Iniciando nó observe_image', {
@@ -44,19 +103,23 @@ export async function observeImageNode(state: WorkflowGraphState) {
     feedbackLength: feedback.length
   });
 
-  const prompt = await renderPrompt('observe-image.prompt.md', { feedback });
+  const prompt = await renderPrompt('observe-image.prompt.md', {
+    feedback,
+    ocr_json: JSON.stringify(buildPromptOcrObservation(state.ocrObservation), null, 2)
+  });
 
   const execute = traceStep(
     async () => {
       const response = await buildChatModel(state.provider, state.observeModel).invoke([
         new SystemMessage(prompt),
-        new HumanMessage({
-          content: [
-            { type: 'text', text: `Arquivo de entrada: ${path.basename(state.inputImage)}` },
-            { type: 'text', text: 'Observe a imagem e retorne apenas o JSON solicitado.' },
-            imageContentFromFile(state.inputImage)
-          ]
-        })
+	        new HumanMessage({
+	          content: [
+	            { type: 'text', text: `Arquivo de entrada: ${path.basename(state.inputImage)}` },
+	            { type: 'text', text: 'Observe a imagem e retorne apenas o JSON solicitado.' },
+	            imageContentFromFile(state.inputImage),
+	            ...buildOcrReviewImageContent(state.ocrObservation)
+	          ]
+	        })
       ]);
       const parsedPayload = response.content;
       await persistRawResponse(state.outputDir, '01-image-observation', attempt, parsedPayload);
@@ -69,13 +132,15 @@ export async function observeImageNode(state: WorkflowGraphState) {
       logger.info('Nó observe_image concluído com sucesso', {
         attempt,
         touchPointCount: observation.touchPointsDetected.length,
-        outsideTextCount: observation.textsOutsideShapes.length
+        outsideTextCount: observation.textsOutsideShapes.length,
+        usage: response.usage
       });
 
       return {
         observeAttempts: attempt,
         imageObservation: observation,
-        observeFeedback: 'Nenhum.'
+        observeFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('observe_image', startedAt, response.usage)
       };
     },
     {
@@ -101,12 +166,14 @@ export async function observeImageNode(state: WorkflowGraphState) {
       observeAttempts: attempt,
       imageObservation: null,
       observeFeedback: message,
+      stepMetrics: buildStepMetricUpdate('observe_image', startedAt),
       failures: [`observe: ${message}`]
     };
   }
 }
 
 export async function validateImageObservationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_image_observation', {
     observeAttempts: state.observeAttempts
   });
@@ -116,7 +183,10 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       const issues = validateImageObservation(state.imageObservation);
       if (issues.length === 0) {
         logger.info('Validação da observação concluída sem erros');
-        return { observeFeedback: 'Nenhum.' };
+        return {
+          observeFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt)
+        };
       }
 
       logger.warn('Validação da observação encontrou inconsistências', {
@@ -126,6 +196,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
 
       return {
         observeFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt),
         failures: issues.map((issue) => `observe: ${issue}`)
       };
     },
@@ -143,6 +214,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
 }
 
 export async function extractEventsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const imageObservation = state.imageObservation;
   if (!imageObservation) {
     throw new Error('Estado inválido: imageObservation ausente.');
@@ -163,7 +235,7 @@ export async function extractEventsNode(state: WorkflowGraphState) {
   const model = buildChatModel(state.provider, state.extractModel);
   const deterministicCandidateContext = normalizeCandidateContextDomainModels(
     imageObservationToCandidateContext(imageObservation, { inputImage: state.inputImage }),
-    { inputImage: state.inputImage }
+    { inputImage: state.inputImage, env: state.env }
   );
   const execute = traceStep(
     async () => {
@@ -173,26 +245,31 @@ export async function extractEventsNode(state: WorkflowGraphState) {
       ]);
       await persistRawResponse(state.outputDir, '02-candidate-events', attempt, response.content);
 
+      const parsedCandidateContext = CandidateContextSchema.parse(parseJsonResponse(response.content));
       const candidateContext = normalizeCandidateContextDomainModels(
-        enrichCandidateContextFromObservation(
-          CandidateContextSchema.parse(parseJsonResponse(response.content)),
-          imageObservation,
-          { inputImage: state.inputImage }
-        ),
-        { inputImage: state.inputImage }
+        shouldUseDeterministicCandidateContext(parsedCandidateContext, imageObservation)
+          ? deterministicCandidateContext
+          : enrichCandidateContextFromObservation(
+              parsedCandidateContext,
+              imageObservation,
+              { inputImage: state.inputImage, env: state.env }
+            ),
+        { inputImage: state.inputImage, env: state.env }
       );
       await persistStageJson(state.outputDir, '02-candidate-events.json', candidateContext);
 
       logger.info('Nó extract_events concluído com sucesso', {
         attempt,
         candidateEventCount: candidateContext.candidateEvents.length,
-        candidateFlowCount: candidateContext.candidateFlows.length
+        candidateFlowCount: candidateContext.candidateFlows.length,
+        usage: response.usage
       });
 
       return {
         extractAttempts: attempt,
         candidateContext,
-        extractFeedback: 'Nenhum.'
+        extractFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('extract_events', startedAt, response.usage)
       };
     },
     {
@@ -221,12 +298,14 @@ export async function extractEventsNode(state: WorkflowGraphState) {
     return {
       extractAttempts: attempt,
       candidateContext: deterministicCandidateContext,
-      extractFeedback: `fallback determinístico aplicado após falha do extractor: ${message}`
+      extractFeedback: `fallback determinístico aplicado após falha do extractor: ${message}`,
+      stepMetrics: buildStepMetricUpdate('extract_events', startedAt)
     };
   }
 }
 
 export async function validateCandidateEventsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_candidate_events', {
     extractAttempts: state.extractAttempts
   });
@@ -236,7 +315,10 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
       const issues = validateCandidateContext(state.candidateContext);
       if (issues.length === 0) {
         logger.info('Validação dos candidatos concluída sem erros');
-        return { extractFeedback: 'Nenhum.' };
+        return {
+          extractFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_candidate_events', startedAt)
+        };
       }
 
       logger.warn('Validação dos candidatos encontrou inconsistências', {
@@ -246,6 +328,7 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
 
       return {
         extractFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_candidate_events', startedAt),
         failures: issues.map((issue) => `extract: ${issue}`)
       };
     },
@@ -267,6 +350,7 @@ export async function validateExtractionNode(state: WorkflowGraphState) {
 }
 
 export async function normalizeContextNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const candidateContext = state.candidateContext;
   if (!candidateContext) {
     throw new Error('Estado inválido: candidateContext ausente.');
@@ -280,38 +364,48 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
 
   const prompt = await renderPrompt('normalize-context.prompt.md', {
     feedback: state.normalizeAttempts > 0 ? state.normalizeFeedback : 'Nenhum.',
-    input_json: JSON.stringify(candidateContext, null, 2)
+    input_json: JSON.stringify(candidateContext, null, 2),
+    observation_json: JSON.stringify(state.imageObservation ?? null, null, 2)
   });
 
   const model = buildChatModel(state.provider, state.normalizeModel);
   const deterministicContext = candidateContextToRecognizedContext(candidateContext, {
-    inputImage: state.inputImage
+    inputImage: state.inputImage,
+    env: state.env
   });
   const execute = traceStep(
     async () => {
       const response = await model.invoke([
         new SystemMessage(prompt),
-        new HumanMessage('Revise os candidatos e devolva apenas o JSON de correções.')
+        new HumanMessage({
+          content: [
+            { type: 'text', text: 'Revise os candidatos contra a observação visual e a imagem original. Devolva apenas o JSON de correções.' },
+            imageContentFromFile(state.inputImage)
+          ]
+        })
       ]);
       await persistRawResponse(state.outputDir, '03-standardized-context', attempt, response.content);
 
       const review = NormalizationReviewSchema.parse(parseJsonResponse(response.content));
       const standardizedContext = canonicalizeContext(applyNormalizationReview(candidateContext, review, {
-        inputImage: state.inputImage
-      }));
+        inputImage: state.inputImage,
+        env: state.env
+      }), { env: state.env });
 
       await persistStageJson(state.outputDir, '03-standardized-context.json', standardizedContext);
 
       logger.info('Nó normalize_context concluído com sucesso', {
         attempt,
         flowCount: standardizedContext.recognizedFlows.length,
-        rowCount: standardizedContext.rows.length
+        rowCount: standardizedContext.rows.length,
+        usage: response.usage
       });
 
       return {
         normalizeAttempts: attempt,
         standardizedContext,
-        normalizeFeedback: 'Nenhum.'
+        normalizeFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('normalize_context', startedAt, response.usage)
       };
     },
     {
@@ -336,28 +430,33 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
       error: message
     });
 
-    const standardizedContext = canonicalizeContext(deterministicContext);
+    const standardizedContext = canonicalizeContext(deterministicContext, { env: state.env });
     await persistStageJson(state.outputDir, '03-standardized-context.json', standardizedContext);
 
     return {
       normalizeAttempts: attempt,
       standardizedContext,
-      normalizeFeedback: `fallback determinístico aplicado após falha do reviewer: ${message}`
+      normalizeFeedback: `fallback determinístico aplicado após falha do reviewer: ${message}`,
+      stepMetrics: buildStepMetricUpdate('normalize_context', startedAt)
     };
   }
 }
 
 export async function validateNormalizationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_normalization', {
     normalizeAttempts: state.normalizeAttempts
   });
 
   const execute = traceStep(
     async () => {
-      const issues = validateRecognizedContext(state.standardizedContext, 'normalize');
+      const issues = validateRecognizedContext(state.standardizedContext, 'normalize', { env: state.env });
       if (issues.length === 0) {
         logger.info('Validação da normalização concluída sem erros');
-        return { normalizeFeedback: 'Nenhum.' };
+        return {
+          normalizeFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_normalization', startedAt)
+        };
       }
 
       logger.warn('Validação da normalização encontrou inconsistências', {
@@ -367,6 +466,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
 
       return {
         normalizeFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_normalization', startedAt),
         failures: issues.map((issue) => `normalize: ${issue}`)
       };
     },
@@ -384,6 +484,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
 }
 
 export async function createWorkbookNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const standardizedContext = state.standardizedContext;
   if (!standardizedContext) {
     throw new Error('Estado inválido: standardizedContext ausente.');
@@ -415,7 +516,8 @@ export async function createWorkbookNode(state: WorkflowGraphState) {
       return {
         workbookAttempts: attempt,
         workbook,
-        workbookFeedback: 'Nenhum.'
+        workbookFeedback: 'Nenhum.',
+        stepMetrics: buildStepMetricUpdate('create_workbook', startedAt)
       };
     },
     {
@@ -439,12 +541,14 @@ export async function createWorkbookNode(state: WorkflowGraphState) {
       workbookAttempts: attempt,
       workbook: null,
       workbookFeedback: message,
+      stepMetrics: buildStepMetricUpdate('create_workbook', startedAt),
       failures: [`workbook: ${message}`]
     };
   }
 }
 
 export async function validateWorkbookNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   logger.info('Iniciando nó validate_workbook', {
     workbookAttempts: state.workbookAttempts
   });
@@ -454,7 +558,10 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
       const issues = validateWorkbook(state.workbook);
       if (issues.length === 0) {
         logger.info('Validação do workbook concluída sem erros');
-        return { workbookFeedback: 'Nenhum.' };
+        return {
+          workbookFeedback: 'Nenhum.',
+          stepMetrics: buildStepMetricUpdate('validate_workbook', startedAt)
+        };
       }
 
       logger.warn('Validação do workbook encontrou inconsistências', {
@@ -464,6 +571,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
 
       return {
         workbookFeedback: issues.join('\n'),
+        stepMetrics: buildStepMetricUpdate('validate_workbook', startedAt),
         failures: issues.map((issue) => `workbook: ${issue}`)
       };
     },
@@ -481,6 +589,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
 }
 
 export async function failNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
   const lastFailure = state.failures.at(-1) ?? 'Workflow falhou sem detalhes.';
   logger.error('Encerrando workflow em fail', {
     failures: state.failures,
@@ -489,7 +598,9 @@ export async function failNode(state: WorkflowGraphState) {
 
   const execute = traceStep(
     async () => {
-      throw new Error(lastFailure);
+      return {
+        stepMetrics: buildStepMetricUpdate('fail', startedAt)
+      };
     },
     {
       name: 'fail_node',
@@ -516,27 +627,52 @@ async function persistRawResponse(outputDir: string, stagePrefix: string, attemp
 
 function sanitizeImageObservation(observation: ImageObservation): ImageObservation {
   const textsOutsideShapes = uniqueStrings(observation.textsOutsideShapes);
-  const touchPointsDetected = uniqueStrings(observation.touchPointsDetected);
+  const areasDetected = uniqueStrings(observation.areasDetected);
+  const rawTouchPointsDetected = uniqueStrings(observation.touchPointsDetected);
+  const touchPointsDetected = rawTouchPointsDetected.filter((touchPointTitle) => !textsOutsideShapes.includes(touchPointTitle));
+  const droppedTouchPoints = rawTouchPointsDetected.filter((touchPointTitle) => textsOutsideShapes.includes(touchPointTitle));
   const uncertainItems = uniqueStrings(observation.uncertainItems);
+  const roleByEvent = new Map(
+    observation.eventVisualSemantics.map((semantic) => [
+      semantic.eventTitle.trim(),
+      roleFromColor(semantic.colorHex, semantic.role)
+    ])
+  );
+  const touchPointByEvent = deriveTouchPointAssignment(observation.flowsDetected, roleByEvent, touchPointsDetected);
+  const touchPointReassignments = collectTouchPointReassignments(
+    observation.touchPointEventCorrelations,
+    touchPointByEvent
+  );
 
   return {
     ...observation,
+    areasDetected,
     touchPointsDetected,
     textsOutsideShapes,
+    textObservations: observation.textObservations
+      .map((textObservation) => ({
+        ...textObservation,
+        text: textObservation.text.trim(),
+        locationHint: textObservation.locationHint?.trim(),
+        ocrAlternatives: uniqueStrings(textObservation.ocrAlternatives),
+        ambiguousCharacters: uniqueStrings(textObservation.ambiguousCharacters),
+        reasoning: textObservation.reasoning.trim()
+      }))
+      .filter((textObservation) => textObservation.text !== ''),
     eventVisualSemantics: observation.eventVisualSemantics
       .map((semantic) => ({
         ...semantic,
         eventTitle: semantic.eventTitle.trim(),
+        role: roleFromColor(semantic.colorHex, semantic.role),
         reasoning: semantic.reasoning.trim()
       }))
       .filter((semantic) => semantic.eventTitle !== '' && textsOutsideShapes.includes(semantic.eventTitle)),
-    touchPointEventCorrelations: observation.touchPointEventCorrelations
-      .map((correlation) => ({
-        ...correlation,
-        eventsObservedAroundTouchPoint: uniqueStrings(correlation.eventsObservedAroundTouchPoint)
-          .filter((eventTitle) => textsOutsideShapes.includes(eventTitle))
-      }))
-      .filter((correlation) => correlation.touchPointTitle.trim() !== ''),
+    touchPointEventCorrelations: rebuildTouchPointEventCorrelations(
+      observation.touchPointEventCorrelations,
+      touchPointByEvent,
+      touchPointsDetected,
+      textsOutsideShapes
+    ),
     flowsDetected: observation.flowsDetected
       .map((flow) => ({
         ...flow,
@@ -551,22 +687,274 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     actorsDetected: uniqueStrings(observation.actorsDetected),
     servicesDetected: uniqueStrings(observation.servicesDetected),
     uncertainItems,
-    assumptions: buildObservationAssumptions(uncertainItems)
+    assumptions: buildObservationAssumptions(uncertainItems, droppedTouchPoints, touchPointReassignments)
   };
+}
+
+function deriveTouchPointAssignment(
+  flows: ImageObservation['flowsDetected'],
+  roleByEvent: Map<string, ImageObservation['eventVisualSemantics'][number]['role']>,
+  validTouchPoints: string[]
+): Map<string, string> {
+  const assignment = new Map<string, string>();
+  const sortedFlows = [...flows].sort((left, right) => flowPriority(left) - flowPriority(right));
+
+  for (const flow of sortedFlows) {
+    const orderedTouchPoints = flow.touchPoints.filter((touchPointTitle) => validTouchPoints.includes(touchPointTitle));
+    if (orderedTouchPoints.length === 0) {
+      continue;
+    }
+    const touchPointsWithProtagonist = new Set<string>();
+    for (const [event, owner] of assignment.entries()) {
+      if (orderedTouchPoints.includes(owner) && roleByEvent.get(event) === 'protagonist') {
+        touchPointsWithProtagonist.add(owner);
+      }
+    }
+
+    let touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, 0);
+    let lastObservedTouchPoint: string | undefined;
+    const pendingEvents: string[] = [];
+
+    for (const eventTitle of flow.orderedEventTitles) {
+      const existingOwner = assignment.get(eventTitle);
+      const role = roleByEvent.get(eventTitle);
+
+      if (existingOwner) {
+        lastObservedTouchPoint = existingOwner;
+        const ownerIndex = orderedTouchPoints.indexOf(existingOwner);
+        if (ownerIndex >= 0) {
+          touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, ownerIndex + 1);
+        }
+        continue;
+      }
+
+      if (role === 'protagonist') {
+        const owner = touchPointCursor !== -1
+          ? orderedTouchPoints[touchPointCursor]
+          : lastObservedTouchPoint || orderedTouchPoints[orderedTouchPoints.length - 1];
+
+        assignment.set(eventTitle, owner);
+        touchPointsWithProtagonist.add(owner);
+
+        const pendingOwner = lastObservedTouchPoint || owner;
+        for (const pendingEvent of pendingEvents) {
+          if (!assignment.has(pendingEvent)) {
+            assignment.set(pendingEvent, pendingOwner);
+          }
+        }
+        pendingEvents.length = 0;
+        lastObservedTouchPoint = owner;
+        touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, touchPointCursor === -1 ? 0 : touchPointCursor + 1);
+        continue;
+      }
+
+      pendingEvents.push(eventTitle);
+    }
+
+    if (pendingEvents.length > 0) {
+      const fallbackOwner = lastObservedTouchPoint
+        || (touchPointCursor !== -1 ? orderedTouchPoints[touchPointCursor] : orderedTouchPoints[orderedTouchPoints.length - 1]);
+      for (const pendingEvent of pendingEvents) {
+        if (!assignment.has(pendingEvent)) {
+          assignment.set(pendingEvent, fallbackOwner);
+        }
+      }
+    }
+  }
+
+  return assignment;
+}
+
+function nextAvailableTouchPoint(
+  orderedTouchPoints: string[],
+  alreadyTaken: Set<string>,
+  startIndex: number
+): number {
+  for (let index = Math.max(0, startIndex); index < orderedTouchPoints.length; index += 1) {
+    if (!alreadyTaken.has(orderedTouchPoints[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function flowPriority(flow: ImageObservation['flowsDetected'][number]): number {
+  if (flow.flowType === 'main') {
+    return 0;
+  }
+  if (flow.flowType === 'unknown') {
+    return 1;
+  }
+  return 2;
+}
+
+function collectTouchPointReassignments(
+  correlations: ImageObservation['touchPointEventCorrelations'],
+  touchPointByEvent: Map<string, string>
+): Array<{ eventTitle: string; from: string; to: string }> {
+  const reassignments: Array<{ eventTitle: string; from: string; to: string }> = [];
+  for (const correlation of correlations) {
+    for (const eventTitle of correlation.eventsObservedAroundTouchPoint) {
+      const expected = touchPointByEvent.get(eventTitle.trim());
+      if (expected && expected !== correlation.touchPointTitle.trim()) {
+        reassignments.push({
+          eventTitle: eventTitle.trim(),
+          from: correlation.touchPointTitle.trim(),
+          to: expected
+        });
+      }
+    }
+  }
+  return reassignments;
+}
+
+function rebuildTouchPointEventCorrelations(
+  correlations: ImageObservation['touchPointEventCorrelations'],
+  touchPointByEvent: Map<string, string>,
+  validTouchPoints: string[],
+  observedEvents: string[]
+): ImageObservation['touchPointEventCorrelations'] {
+  const correlationByTouchPoint = new Map<string, ImageObservation['touchPointEventCorrelations'][number]>();
+
+  for (const correlation of correlations) {
+    const trimmedTitle = correlation.touchPointTitle.trim();
+    if (!validTouchPoints.includes(trimmedTitle)) {
+      continue;
+    }
+    correlationByTouchPoint.set(trimmedTitle, {
+      ...correlation,
+      touchPointTitle: trimmedTitle,
+      eventsObservedAroundTouchPoint: []
+    });
+  }
+
+  for (const touchPointTitle of validTouchPoints) {
+    if (!correlationByTouchPoint.has(touchPointTitle)) {
+      correlationByTouchPoint.set(touchPointTitle, {
+        touchPointTitle,
+        eventsObservedAroundTouchPoint: [],
+        confidence: 0.7,
+        reasoning: 'Correlação reconstruída deterministicamente a partir de flowsDetected.orderedEventTitles e do papel de cada evento.'
+      });
+    }
+  }
+
+  for (const [eventTitle, touchPointTitle] of touchPointByEvent.entries()) {
+    if (!observedEvents.includes(eventTitle)) {
+      continue;
+    }
+    const correlation = correlationByTouchPoint.get(touchPointTitle);
+    if (!correlation) {
+      continue;
+    }
+    if (!correlation.eventsObservedAroundTouchPoint.includes(eventTitle)) {
+      correlation.eventsObservedAroundTouchPoint.push(eventTitle);
+    }
+  }
+
+  return [...correlationByTouchPoint.values()].filter((correlation) => correlation.eventsObservedAroundTouchPoint.length > 0);
+}
+
+function roleFromColor(
+  colorHex: ImageObservation['eventVisualSemantics'][number]['colorHex'],
+  fallbackRole: ImageObservation['eventVisualSemantics'][number]['role']
+): ImageObservation['eventVisualSemantics'][number]['role'] {
+  if (colorHex === '#FF0000') {
+    return 'protagonist';
+  }
+  if (colorHex === '#305CDE') {
+    return 'supporting';
+  }
+  return fallbackRole;
+}
+
+function buildPromptOcrObservation(ocrObservation: OcrObservation | null): OcrObservation | null {
+  if (!ocrObservation) {
+    return null;
+  }
+
+  const trustedTexts = ocrObservation.texts.filter((text) => !text.needsOcrReview);
+  const withheldTexts = ocrObservation.texts.filter((text) => text.needsOcrReview);
+
+  return {
+    ...ocrObservation,
+    texts: trustedTexts,
+    assumptions: [
+      ...ocrObservation.assumptions,
+      ...withheldTexts.map((text) =>
+        `OCR leu '${text.text}' com baixa confiança e essa leitura foi omitida do OCR primário enviado ao agente; use a imagem original para transcrever essa região.`
+      )
+    ]
+  };
+}
+
+function buildOcrReviewImageContent(ocrObservation: OcrObservation | null) {
+  if (!ocrObservation) {
+    return [];
+  }
+
+  return ocrObservation.texts
+    .filter((text) => text.needsOcrReview && text.cropImage)
+    .flatMap((text, index) => [
+      {
+        type: 'text' as const,
+        text: `Crop ampliado para revisão OCR ${index + 1}. Transcreva a label técnica visualmente; não use a hipótese OCR como definitiva.`
+      },
+      imageContentFromFile(text.cropImage as string)
+    ]);
+}
+
+function shouldUseDeterministicCandidateContext(
+  candidateContext: CandidateContext,
+  observation: ImageObservation
+): boolean {
+  const observedEvents = new Set(observation.textsOutsideShapes);
+  const hasUnobservedCandidateEvent = candidateContext.candidateEvents
+    .some((event) => !observedEvents.has(event.event_title));
+  const hasUnobservedFlowEvent = candidateContext.candidateFlows
+    .some((flow) => flow.orderedEventTitles.some((eventTitle) => !observedEvents.has(eventTitle)));
+
+  if (hasUnobservedCandidateEvent || hasUnobservedFlowEvent) {
+    logger.warn('Extração LLM gerou eventos fora de textsOutsideShapes; usando candidatos determinísticos da observação', {
+      hasUnobservedCandidateEvent,
+      hasUnobservedFlowEvent
+    });
+    return true;
+  }
+
+  return false;
 }
 
 function uniqueStrings(items: string[]): string[] {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 }
 
-function buildObservationAssumptions(uncertainItems: string[]): string[] {
-  if (uncertainItems.length === 0) {
-    return [];
+function buildObservationAssumptions(
+  uncertainItems: string[],
+  droppedTouchPoints: string[] = [],
+  touchPointReassignments: Array<{ eventTitle: string; from: string; to: string }> = []
+): string[] {
+  const assumptions: string[] = [];
+
+  if (uncertainItems.length > 0) {
+    assumptions.push(
+      `Os itens ${uncertainItems.map((item) => `'${item}'`).join(', ')} foram tratados como estruturais ou ambíguos e não como eventos.`
+    );
   }
 
-  return [
-    `Os itens ${uncertainItems.map((item) => `'${item}'`).join(', ')} foram tratados como estruturais ou ambíguos e não como eventos.`
-  ];
+  if (droppedTouchPoints.length > 0) {
+    assumptions.push(
+      `Os touch points ${droppedTouchPoints.map((item) => `'${item}'`).join(', ')} foram removidos por colidirem com labels de eventos outside; mantida apenas a leitura como evento.`
+    );
+  }
+
+  if (touchPointReassignments.length > 0) {
+    logger.info('Reatribuições determinísticas de source_touch_point aplicadas', {
+      reassignments: touchPointReassignments
+    });
+  }
+
+  return assumptions;
 }
 
 function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
@@ -589,7 +977,7 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
     },
     {
       item: 'mapping_tags',
-      detail: 'tags incluem touch_point, business_domain, domain, subdomain, metric_type e source_sheet.'
+      detail: 'tags seguem o padrão touch_point:<slug>,business_domain:<slug>.'
     }
   ];
 
@@ -600,4 +988,20 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
       detail: assumption
     }))
   ];
+}
+
+function buildStepMetricUpdate(
+  stepName: WorkflowStepName,
+  startedAt: number,
+  usage?: ModelUsage
+): Partial<Record<WorkflowStepName, WorkflowStepMetrics>> {
+  return {
+    [stepName]: {
+      executions: 1,
+      durationMs: Date.now() - startedAt,
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      totalTokens: usage?.totalTokens ?? 0
+    }
+  };
 }

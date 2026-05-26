@@ -6,6 +6,45 @@ export const ObservedColorSchema = z.enum(['#FF0000', '#305CDE', 'unknown']);
 export const ObservedArrowStyleSchema = z.enum(['solid', 'dashed', 'unknown']);
 export const ObservedFlowTypeSchema = z.enum(['main', 'alternate', 'unknown']);
 
+export const ObservedTextKindSchema = z.enum(['event_candidate', 'touch_point', 'area', 'structural', 'uncertain']);
+
+export const ObservedTextSchema = z.object({
+  text: z.string().min(1),
+  kind: ObservedTextKindSchema,
+  role: ObservedEventRoleSchema.optional(),
+  colorHex: ObservedColorSchema.optional(),
+  confidence: z.number().min(0).max(1),
+  locationHint: z.string().min(1).optional(),
+  ocrAlternatives: z.array(z.string().min(1)).optional().default([]),
+  ambiguousCharacters: z.array(z.string().min(1)).optional().default([]),
+  needsOcrReview: z.boolean().optional().default(false),
+  reasoning: z.string().min(1)
+});
+
+export const OcrTextSchema = z.object({
+  text: z.string().min(1),
+  confidence: z.number().min(0).max(100),
+  source: z.string().min(1),
+  colorHint: z.string().min(1).optional(),
+  cropImage: z.string().min(1).optional(),
+  bbox: z.object({
+    x: z.number().min(0),
+    y: z.number().min(0),
+    width: z.number().min(0),
+    height: z.number().min(0)
+  }).optional(),
+  ocrAlternatives: z.array(z.string().min(1)).default([]),
+  ambiguousCharacters: z.array(z.string().min(1)).default([]),
+  needsOcrReview: z.boolean().default(false)
+});
+
+export const OcrObservationSchema = z.object({
+  inputImage: z.string().min(1),
+  preprocessedImage: z.string().min(1).optional(),
+  texts: z.array(OcrTextSchema),
+  assumptions: z.array(z.string())
+});
+
 export const EventVisualSemanticSchema = z.object({
   eventTitle: z.string().min(1),
   role: ObservedEventRoleSchema,
@@ -32,8 +71,10 @@ export const ObservedFlowSchema = z.object({
 });
 
 export const ImageObservationSchema = z.object({
+  areasDetected: z.array(z.string()).optional().default([]),
   touchPointsDetected: z.array(z.string()),
   textsOutsideShapes: z.array(z.string()),
+  textObservations: z.array(ObservedTextSchema).optional().default([]),
   eventVisualSemantics: z.array(EventVisualSemanticSchema),
   touchPointEventCorrelations: z.array(TouchPointCorrelationSchema),
   flowsDetected: z.array(ObservedFlowSchema),
@@ -146,6 +187,7 @@ export const PROJECT_FORMAT_COLUMNS = [
 ] as const;
 
 export type ImageObservation = z.infer<typeof ImageObservationSchema>;
+export type OcrObservation = z.infer<typeof OcrObservationSchema>;
 export type CandidateContext = z.infer<typeof CandidateContextSchema>;
 export type NormalizationReview = z.infer<typeof NormalizationReviewSchema>;
 export type RecognizedContext = z.infer<typeof RecognizedContextSchema>;

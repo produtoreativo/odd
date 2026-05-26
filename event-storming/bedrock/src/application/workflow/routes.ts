@@ -21,7 +21,7 @@ export function routeFromStart(state: WorkflowGraphState) {
   if (state.startFrom === 'normalize') {
     return 'normalize_context';
   }
-  return 'observe_image';
+  return 'prepare_image_ocr';
 }
 
 export function routeAfterObservation(state: WorkflowGraphState) {
@@ -59,7 +59,7 @@ export function routeAfterExtraction(state: WorkflowGraphState) {
 }
 
 export function routeAfterNormalization(state: WorkflowGraphState) {
-  const hasValidContext = validateRecognizedContext(state.standardizedContext, 'normalize').length === 0;
+  const hasValidContext = validateRecognizedContext(state.standardizedContext, 'normalize', { env: state.env }).length === 0;
   logger.info('Avaliando transição após normalização', {
     normalizeAttempts: state.normalizeAttempts,
     maxAttempts: state.maxAttempts,

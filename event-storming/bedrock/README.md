@@ -3,10 +3,11 @@
 Workflow em TypeScript com LangGraph para processar imagens de event storming usando Amazon Bedrock.
 
 O fluxo executa:
-1. observação multimodal da imagem;
-2. extração de eventos e fluxos candidatos com enriquecimento de metadados de projeto;
-3. normalização do contexto em formato de projeto;
-4. geração da planilha final no modelo usado em `odd/odd-orchestrator/samples/event-storming-tuangou-project-format.xlsx`.
+1. preparação OCR local de labels técnicas em vermelho;
+2. observação multimodal da imagem usando o OCR estruturado como evidência de texto;
+3. extração de eventos e fluxos candidatos com enriquecimento de metadados de projeto;
+4. normalização do contexto em formato de projeto;
+5. geração da planilha final no modelo usado em `odd/odd-orchestrator/samples/event-storming-tuangou-project-format.xlsx`.
 
 ## Execução
 
@@ -15,19 +16,38 @@ npm install
 
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
+  --env dev \
+  --provider bedrock
+
+
+npm run start -- \
+  --input-image samples/schola.png \
+  --workflow-key schola \
+  --output ./generated \
+  --env dev \
   --provider bedrock
 ```
+
+Cada execução grava os artefatos em uma pasta versionada:
+
+```text
+generated/<workflow-key>/<run-id>/
+```
+
+Quando `--workflow-key` não é informado, o workflow gera uma key determinística a partir do nome/caminho da imagem e do provider. `--run-id` pode ser informado para reproduzir uma pasta específica; sem ele, o valor segue o formato `yyyyMMdd_HHmmss`.
 
 Para retomar a partir do agente 2:
 
 ```bash
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
   --provider bedrock \
   --start-from extract \
-  --image-observation ./generated/payments/01-image-observation.json
+  --image-observation ./generated/payments/<run-id>/01-image-observation.json
 ```
 
 Para retomar a partir do agente 3:
@@ -35,19 +55,26 @@ Para retomar a partir do agente 3:
 ```bash
 npm run start -- \
   --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
+  --workflow-key payments \
+  --output ./generated \
   --provider bedrock \
   --start-from normalize \
-  --candidate-context ./generated/payments/02-candidate-events.json
+  --candidate-context ./generated/payments/<run-id>/02-candidate-events.json \
+  --image-observation ./generated/payments/<run-id>/01-image-observation.json
 ```
 
 ## Argumentos
 
 - `--input-image`: caminho da imagem de event storming
-- `--output-dir`: diretório de saída
+- `--workflow-key`: identidade estável da extração; usado em `generated/<workflow-key>/<run-id>/`
+- `--output`: raiz dos artefatos versionados; opcional, padrão `./generated`
+- `--output-root`: alias de `--output`
+- `--run-id`: identificador da execução; opcional, padrão `yyyyMMdd_HHmmss`
+- `--output-dir`: compatibilidade legada para diretório explícito de saída; prefira `--workflow-key` + `--output`
 - `--provider`: use `bedrock`
+- `--env`: ambiente usado no `query_hint`; opcional, padrão `dev`
 - `--start-from`: `observe`, `extract` ou `normalize`
-- `--image-observation`: obrigatório com `--start-from extract`
+- `--image-observation`: obrigatório com `--start-from extract`; recomendado com `--start-from normalize` para revisão OCR/semântica
 - `--candidate-context`: obrigatório com `--start-from normalize`
 - `--model`: fallback global para todos os agentes
 - `--observe-model`: override do modelo do agente de observação
@@ -75,9 +102,14 @@ As credenciais AWS podem vir do ambiente padrão do SDK:
 
 ## Saídas
 
+As saídas ficam dentro de `generated/<workflow-key>/<run-id>/`:
+
+- `event-storming-metadata.json`: metadados da execução, incluindo `workflowKey`, `runId`, modelos e paths
 - `01-image-observation.json`
+- `00-ocr-observation.json`: OCR local estruturado das labels técnicas detectadas
+- `00-ocr-red-labels.png`: imagem preprocessada para OCR de labels vermelhas
 - `01-image-observation.attempt-<n>.raw.txt`
-- `02-candidate-events.json`: eventos candidatos já enriquecidos com `source_touch_point`, `stage`, `service` e `tags` no padrão de projeto
+- `02-candidate-events.json`: eventos candidatos normalizados com `source_touch_point`, `stage`, `service` e `tags` aderentes ao contrato dos prompts
 - `02-candidate-events.attempt-<n>.raw.txt`
 - `03-standardized-context.json`: contexto reconhecido pronto para gerar a planilha final
 - `03-standardized-context.attempt-<n>.raw.txt`
@@ -101,7 +133,7 @@ Do agente 2 em diante, o pipeline tenta produzir saída compatível com o format
 
 - `stage` no padrão slug `dominio_subdominio`
 - `service` no padrão `dominio.subdominio`
-- `tags` com `touch_point`, `business_domain`, `domain`, `subdomain`, `metric_type` e `source_sheet`
+- `tags` com `touch_point` e `business_domain`
 - `source_touch_point` para preservar a origem do evento na imagem
 - `event_key` normalizado para o padrão do projeto, com deduplicação automática quando necessário
 

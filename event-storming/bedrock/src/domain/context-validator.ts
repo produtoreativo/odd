@@ -1,6 +1,6 @@
 import {
-  ImageObservation,
   CandidateContext,
+  ImageObservation,
   RecognizedContext,
   WorkbookPayload,
   WorkflowStage,
@@ -24,6 +24,24 @@ export function validateImageObservation(observation: ImageObservation | null): 
   if (observation.touchPointsDetected.length === 0) {
     issues.push('touchPointsDetected não pode estar vazio.');
   }
+  for (const areaTitle of observation.areasDetected) {
+    if (observation.touchPointsDetected.includes(areaTitle)) {
+      issues.push(`área/contexto classificado também como touch point: ${areaTitle}`);
+    }
+  }
+  for (const touchPointTitle of observation.touchPointsDetected) {
+    if (observation.textsOutsideShapes.includes(touchPointTitle)) {
+      issues.push(`touch point colide com evento outside (label duplicada): ${touchPointTitle}`);
+    }
+  }
+  for (const semantic of observation.eventVisualSemantics) {
+    if (semantic.colorHex === '#FF0000' && semantic.role === 'supporting') {
+      issues.push(`eventVisualSemantic em vermelho #FF0000 deve ter role=protagonist: ${semantic.eventTitle}`);
+    }
+    if (semantic.colorHex === '#305CDE' && semantic.role === 'protagonist') {
+      issues.push(`eventVisualSemantic em azul #305CDE deve ter role=supporting: ${semantic.eventTitle}`);
+    }
+  }
   if (observation.textsOutsideShapes.length === 0) {
     issues.push('textsOutsideShapes não pode estar vazio.');
   }
@@ -41,11 +59,56 @@ export function validateImageObservation(observation: ImageObservation | null): 
     if (!correlation.touchPointTitle.trim()) {
       issues.push('touchPointCorrelation sem touchPointTitle.');
     }
+    if (!observation.touchPointsDetected.includes(correlation.touchPointTitle)) {
+      issues.push(`touchPointCorrelation fora de touchPointsDetected: ${correlation.touchPointTitle}`);
+    }
+    if (correlation.eventsObservedAroundTouchPoint.length === 0) {
+      issues.push(`touchPointCorrelation sem eventos associados: ${correlation.touchPointTitle}`);
+    }
   }
 
   for (const semantic of observation.eventVisualSemantics) {
     if (!observation.textsOutsideShapes.includes(semantic.eventTitle)) {
       issues.push(`eventVisualSemantic fora de textsOutsideShapes: ${semantic.eventTitle}`);
+    }
+    if (isLowConfidenceTechnicalLabel(semantic.eventTitle, semantic.confidence)) {
+      issues.push(`eventVisualSemantic com baixa confiança para label técnica: ${semantic.eventTitle}`);
+    }
+    if (hasSuspiciousMixedShortSegment(semantic.eventTitle) && semantic.confidence >= 0.85) {
+      issues.push(`eventVisualSemantic com confiança alta para segmento OCR ambíguo: ${semantic.eventTitle}`);
+    }
+  }
+
+  for (const textObservation of observation.textObservations) {
+    if (textObservation.kind === 'touch_point' && looksLikeContextArea(textObservation)) {
+      issues.push(`textObservation parece área/contexto, não touch point: ${textObservation.text}`);
+    }
+    if (textObservation.kind === 'area' && observation.touchPointsDetected.includes(textObservation.text)) {
+      issues.push(`textObservation area presente em touchPointsDetected: ${textObservation.text}`);
+    }
+    if (textObservation.kind === 'event_candidate' && !observation.textsOutsideShapes.includes(textObservation.text)) {
+      issues.push(`textObservation event_candidate fora de textsOutsideShapes: ${textObservation.text}`);
+    }
+    if (isLowConfidenceTechnicalLabel(textObservation.text, textObservation.confidence)) {
+      issues.push(`textObservation com baixa confiança para label técnica: ${textObservation.text}`);
+    }
+    if (
+      hasSuspiciousMixedShortSegment(textObservation.text)
+      && textObservation.confidence >= 0.85
+      && !textObservation.needsOcrReview
+      && textObservation.ocrAlternatives.length === 0
+      && textObservation.ambiguousCharacters.length === 0
+    ) {
+      issues.push(`textObservation com confiança alta para segmento OCR ambíguo sem revisão: ${textObservation.text}`);
+    }
+    if (
+      textObservation.kind === 'event_candidate'
+      && textObservation.needsOcrReview
+      && observation.textsOutsideShapes.includes(textObservation.text)
+      && !observation.uncertainItems.includes(textObservation.text)
+      && !mentionsVisualConfirmation(textObservation.reasoning)
+    ) {
+      issues.push(`textObservation OCR incerta usada como evento sem confirmação visual ou uncertainItems: ${textObservation.text}`);
     }
   }
 
@@ -58,6 +121,14 @@ export function validateImageObservation(observation: ImageObservation | null): 
         issues.push(`flowDetected com evento fora de textsOutsideShapes: ${eventTitle}`);
       }
     }
+    for (const touchPointTitle of flow.touchPoints) {
+      if (!observation.touchPointsDetected.includes(touchPointTitle)) {
+        issues.push(`flowDetected com touch point fora de touchPointsDetected: ${touchPointTitle}`);
+      }
+      if (observation.areasDetected.includes(touchPointTitle)) {
+        issues.push(`flowDetected usa área/contexto como touch point: ${touchPointTitle}`);
+      }
+    }
   }
 
   const normalizedIssues = unique(issues);
@@ -67,6 +138,41 @@ export function validateImageObservation(observation: ImageObservation | null): 
     });
   }
   return normalizedIssues;
+}
+
+function isLowConfidenceTechnicalLabel(label: string, confidence: number): boolean {
+  return label.includes('.') && label.length >= 8 && confidence < 0.85;
+}
+
+function hasSuspiciousMixedShortSegment(label: string): boolean {
+  if (!isTechnicalLabel(label)) {
+    return false;
+  }
+
+  return label
+    .split(/[._\-/:]+/)
+    .some((segment) => segment.length > 0 && segment.length <= 4 && /[a-zA-Z]/.test(segment) && /\d/.test(segment));
+}
+
+function isTechnicalLabel(label: string): boolean {
+  return /[._\-/:]/.test(label) && /^[a-zA-Z0-9._\-/:]+$/.test(label);
+}
+
+function looksLikeContextArea(textObservation: ImageObservation['textObservations'][number]): boolean {
+  const evidence = [
+    textObservation.locationHint || '',
+    textObservation.reasoning || ''
+  ].join(' ');
+
+  return /\b(swimlane|raia|lane|área|area|dom[ií]nio|domain|sistema|system|agrupador|container|cont[eê]iner|contexto|estrutural|structural)\b/i
+    .test(evidence);
+}
+
+function mentionsVisualConfirmation(reasoning: string): boolean {
+  const normalizedReasoning = slugify(reasoning);
+  return normalizedReasoning.includes('validada_visualmente')
+    || normalizedReasoning.includes('confirmada_visualmente')
+    || normalizedReasoning.includes('confirmado_visualmente');
 }
 
 export function validateCandidateContext(candidateContext: CandidateContext | null): string[] {
@@ -112,9 +218,14 @@ export function validateCandidateContext(candidateContext: CandidateContext | nu
   return normalizedIssues;
 }
 
+type ValidationOptions = {
+  env?: string;
+};
+
 export function validateRecognizedContext(
   context: RecognizedContext | null,
-  stage: WorkflowStage
+  stage: WorkflowStage,
+  options: ValidationOptions = {}
 ): string[] {
   logger.info('Validando contexto reconhecido', {
     stage,
@@ -154,9 +265,17 @@ export function validateRecognizedContext(
       issues.push(`stage não pode ser igual a event_key: ${row.event_key}`);
     }
 
-    const expectedQueryHint = `tags:(event_key:${row.event_key} service:${row.service} source:odd)`;
+    const expectedQueryHint = `tags:(event_key:${row.event_key} env:${normalizeEnv(options.env)})`;
     if (row.query_hint !== expectedQueryHint) {
       issues.push(`query_hint inválido para ${row.event_key}`);
+    }
+
+    const touchPointTag = extractTouchPointTag(row.tags);
+    if (touchPointTag && row.source_touch_point) {
+      const expectedTouchPointSlug = slugify(row.source_touch_point);
+      if (expectedTouchPointSlug && touchPointTag !== expectedTouchPointSlug) {
+        issues.push(`tags.touch_point '${touchPointTag}' não corresponde ao source_touch_point '${row.source_touch_point}' (esperado slug '${expectedTouchPointSlug}') para ${row.event_key}`);
+      }
     }
 
     const uniqueKey = `${row.ordem}:${row.event_key}`;
@@ -185,6 +304,20 @@ export function validateRecognizedContext(
   }
 
   return normalizedIssues;
+}
+
+function normalizeEnv(env?: string): string {
+  return slugify(env || 'dev') || 'dev';
+}
+
+function extractTouchPointTag(tags: string): string | undefined {
+  for (const tag of tags.split(',')) {
+    const [rawKey, ...rest] = tag.trim().split(':');
+    if (slugify(rawKey || '') === 'touch_point' && rest.length > 0) {
+      return rest.join(':').trim();
+    }
+  }
+  return undefined;
 }
 
 export function validateWorkbook(workbook: WorkbookPayload | null): string[] {
