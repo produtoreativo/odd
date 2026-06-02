@@ -3,12 +3,12 @@
 Repositório com dois projetos ativos:
 
 - `event-storming`: transforma imagens de event storming em contexto estruturado
-- `odd-orchestration-v2`: transforma o contexto estruturado em plano de observabilidade, Terraform e aplicação nos providers
+- `obc-o11y`: transforma o contexto estruturado em plano de observabilidade, Terraform e aplicação nos providers
 
 Hoje, o fluxo recomendado do repositório é:
 
 1. processar a imagem no `event-storming/bedrock`
-2. usar o `03-standardized-context.json` como entrada do `odd-orchestration-v2`
+2. usar o `03-standardized-context.json` como entrada do `obc-o11y`
 
 ## Estrutura
 
@@ -16,7 +16,7 @@ Hoje, o fluxo recomendado do repositório é:
 event-storming/
   bedrock/   # workflow multimodal com Amazon Bedrock
   foss/      # variante local/alternativa
-odd-orchestration-v2/
+obc-o11y/
   src/
   generated/
   terraform/
@@ -30,7 +30,7 @@ odd-orchestration-v2/
 - npm 10+
 - Terraform 1.5+
 - credenciais AWS com acesso ao Bedrock, se for usar `event-storming/bedrock`
-- credenciais do provider de observabilidade que você quer aplicar no `odd-orchestration-v2`
+- credenciais do provider de observabilidade que você quer aplicar no `obc-o11y`
 
 ## Instalação
 
@@ -42,10 +42,10 @@ npm install
 npm run check
 ```
 
-### odd-orchestration-v2
+### obc-o11y
 
 ```bash
-cd odd-orchestration-v2
+cd obc-o11y
 npm install
 npm run check
 ```
@@ -74,11 +74,11 @@ EVENT_STORMING_EXTRACT_MODEL=amazon.nova-lite-v1:0
 EVENT_STORMING_NORMALIZE_MODEL=amazon.nova-lite-v1:0
 ```
 
-### odd-orchestration-v2
+### obc-o11y
 
-Arquivo: `odd-orchestration-v2/.env`
+Arquivo: `obc-o11y/.env`
 
-`LANGSMITH_API_KEY` não é necessária para a execução atual do `odd-orchestration-v2`.
+`LANGSMITH_API_KEY` não é necessária para a execução atual do `obc-o11y`.
 
 Variáveis mínimas para geração com Bedrock:
 
@@ -179,12 +179,12 @@ npm run start -- \
 
 ### 2. Gerar e aplicar observabilidade
 
-No `odd-orchestration-v2`:
+No `obc-o11y`:
 
 Exemplo completo com o contexto gerado pelo `event-storming/bedrock`:
 
 ```bash
-cd odd-orchestration-v2
+cd obc-o11y
 
 npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
@@ -203,7 +203,7 @@ Providers suportados:
 Exemplo completo para Dynatrace:
 
 ```bash
-cd odd-orchestration-v2
+cd obc-o11y
 
 npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
@@ -217,7 +217,7 @@ npm run workflow -- \
 Exemplo completo para Datadog com rajadas:
 
 ```bash
-cd odd-orchestration-v2
+cd obc-o11y
 
 npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
@@ -231,7 +231,7 @@ npm run workflow -- \
   --randomize-event-counts
 ```
 
-## odd-orchestration-v2 em detalhes
+## obc-o11y em detalhes
 
 ### Scripts
 
@@ -286,7 +286,7 @@ npm run workflow -- \
   --end-at apply
 ```
 
-### Saídas do odd-orchestration-v2
+### Saídas do obc-o11y
 
 Por execução:
 
@@ -320,7 +320,7 @@ npm run start -- \
   --env dev \
   --provider bedrock
 
-cd ../../odd-orchestration-v2
+cd ../../obc-o11y
 npm install
 npm run workflow -- \
   --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
@@ -333,5 +333,5 @@ npm run workflow -- \
 ## Observações
 
 - O `event-storming/foss` existe no repositório, mas o caminho principal hoje continua sendo `event-storming/bedrock`.
-- O `odd-orchestration-v2` é o orchestrator ativo do repo.
+- O `obc-o11y` é o orchestrator ativo do repo.
 - O `odd-orchestrator` legado não é mais o ponto de entrada recomendado deste README.

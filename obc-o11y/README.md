@@ -283,7 +283,7 @@ No Datadog, os SLOs são gerados como `metric SLOs`, não por `monitor_ids`.
 
 O projeto carrega variáveis nesta ordem:
 
-1. `.env` do `odd-orchestration-v2`
+1. `.env` do `obc-o11y`
 2. fallback em `../event-storming/bedrock/.env`
 
 Variáveis principais:
