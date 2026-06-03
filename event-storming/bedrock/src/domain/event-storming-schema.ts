@@ -125,6 +125,13 @@ export const TouchPointCorrelationSchema = z.object({
   reasoning: z.string().min(1)
 });
 
+export const CommandDetectedSchema = z.object({
+  touchPointTitle: z.string().min(1),
+  commandName: z.string().min(1),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1)
+});
+
 export const ObservedFlowSchema = z.object({
   name: z.string().min(1),
   flowType: ObservedFlowTypeSchema,
@@ -164,6 +171,7 @@ export const ImageObservationSchema = z.object({
   textObservations: z.array(ObservedTextSchema).optional().default([]),
   eventVisualSemantics: z.array(EventVisualSemanticSchema),
   touchPointEventCorrelations: z.array(TouchPointCorrelationSchema),
+  commandsDetected: z.array(CommandDetectedSchema).optional().default([]),
   flowsDetected: z.array(ObservedFlowSchema),
   actorsDetected: z.array(z.string()),
   servicesDetected: z.array(z.string()),
