@@ -267,6 +267,7 @@ export async function buildPlanNode(state: ObservabilityWorkflowState) {
     const rawOutputPath = await persistRawOutput(state.outputDir, '03-dashboard-plan.raw.txt', rawText);
     const plan = normalizeDashboardPlan(
       DashboardPlanSchema.parse(parseBedrockJsonResponse(rawText)),
+      state.dashboardTitle,
       state.rows,
       state.flowOccurrences,
       state.env
@@ -721,17 +722,21 @@ function normalizeSloSuggestions(
 
 function normalizeDashboardPlan(
   plan: DashboardPlan,
+  dashboardTitle: string,
   rows: EventStormingRow[],
   flowOccurrences: FlowOccurrence[],
   env?: string
 ): DashboardPlan {
   const rowByEventKey = new Map(rows.map((row) => [row.eventKey, row]));
   const occurrenceByKey = new Map(flowOccurrences.map((occurrence) => [occurrence.occurrenceKey, occurrence]));
+  const bandTitleById = buildSemanticBandTitleById(flowOccurrences);
 
   return {
     ...plan,
+    dashboardTitle,
     bands: plan.bands.map((band) => ({
       ...band,
+      title: bandTitleById.get(band.id) ?? band.title,
       widgets: band.widgets.map((widget) => {
         const sourceOccurrence = (widget.sourceOccurrenceKeys ?? [])
           .map((occurrenceKey) => occurrenceByKey.get(occurrenceKey))
@@ -754,6 +759,19 @@ function normalizeDashboardPlan(
     })),
     sloSuggestions: normalizeSloSuggestions(plan.sloSuggestions, flowOccurrences, env)
   };
+}
+
+function buildSemanticBandTitleById(flowOccurrences: FlowOccurrence[]): Map<string, string> {
+  const titleById = new Map<string, string>();
+
+  for (const group of groupOccurrencesByFlow(flowOccurrences)) {
+    titleById.set(`${group.flowSlug}_negative_kpis`, `${group.flowName} | Negativos | Contadores`);
+    titleById.set(`${group.flowSlug}_negative_trends`, `${group.flowName} | Negativos | Tendência`);
+    titleById.set(`${group.flowSlug}_positive_kpis`, `${group.flowName} | Positivos | Contadores`);
+    titleById.set(`${group.flowSlug}_positive_trends`, `${group.flowName} | Positivos | Tendência`);
+  }
+
+  return titleById;
 }
 
 function ensurePlanEventTags(tags: string[], eventKey: string, aggregationKey: string | undefined, env?: string): string[] {

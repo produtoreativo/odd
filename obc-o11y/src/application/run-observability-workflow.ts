@@ -199,7 +199,10 @@ async function loadPreloadedState(
     throw new Error(`Use --plan-file para iniciar em ${args.startFrom}.`);
   }
 
-  const plan = await readJsonFile<DashboardPlan>(args.planFile);
+  const loadedPlan = await readJsonFile<DashboardPlan>(args.planFile);
+  const plan = args.dashboardTitle
+    ? { ...loadedPlan, dashboardTitle: args.dashboardTitle }
+    : loadedPlan;
   const rows = plan.customEvents.map((event, index) => ({
     ordem: index + 1,
     eventKey: event.title,

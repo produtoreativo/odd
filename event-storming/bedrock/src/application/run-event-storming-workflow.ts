@@ -47,6 +47,9 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         normalizeModel: agentModels.normalizeModel,
         maxAttempts: args.maxAttempts,
         ocrObservation: null,
+        ocrEventCandidates: null,
+        ocrTextObservations: [],
+        observePromptContext: null,
         imageObservation: preloadedState.imageObservation,
         candidateContext: preloadedState.candidateContext
       },
@@ -106,6 +109,9 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   const observationPath = path.join(args.outputDir, 'image-observation.json');
   const metadataPath = path.join(args.outputDir, 'event-storming-metadata.json');
   const ocrObservationPath = path.join(args.outputDir, 'ocr-observation.json');
+  const ocrEventCandidatesPath = path.join(args.outputDir, 'ocr-event-candidates.json');
+  const ocrTextObservationsPath = path.join(args.outputDir, 'ocr-text-observations.json');
+  const observePromptContextPath = path.join(args.outputDir, 'observe-prompt-context.json');
   const candidatePath = path.join(args.outputDir, 'candidate-events.json');
   const recognizedPath = path.join(args.outputDir, 'recognized-context.json');
   const standardizedPath = path.join(args.outputDir, 'standardized-context.json');
@@ -130,6 +136,15 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   if (result.ocrObservation) {
     await writeJsonFile(ocrObservationPath, result.ocrObservation);
   }
+  if (result.ocrEventCandidates) {
+    await writeJsonFile(ocrEventCandidatesPath, result.ocrEventCandidates);
+  }
+  if (result.ocrTextObservations.length > 0) {
+    await writeJsonFile(ocrTextObservationsPath, result.ocrTextObservations);
+  }
+  if (result.observePromptContext) {
+    await writeJsonFile(observePromptContextPath, result.observePromptContext);
+  }
   if (result.imageObservation) {
     await writeJsonFile(observationPath, result.imageObservation);
   }
@@ -149,6 +164,9 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     metadataPath,
     observationPath,
     ocrObservationPath,
+    ocrEventCandidatesPath,
+    ocrTextObservationsPath,
+    observePromptContextPath,
     candidatePath,
     recognizedPath,
     standardizedPath,
@@ -196,6 +214,9 @@ function buildWorkflowSummary(
   const totalDurationMs = Date.now() - workflowStartedAt;
   const orderedSteps: WorkflowStepName[] = [
     'prepare_image_ocr',
+    'classify_ocr_event_candidates',
+    'compose_ocr_text_observations',
+    'compose_observe_prompt_context',
     'observe_image',
     'validate_image_observation',
     'extract_events',

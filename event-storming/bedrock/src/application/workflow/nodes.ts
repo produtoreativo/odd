@@ -6,7 +6,11 @@ import {
   ImageObservation,
   ImageObservationSchema,
   NormalizationReviewSchema,
+  OcrEventCandidates,
+  OcrEventCandidatesSchema,
   OcrObservation,
+  OcrPromptContext,
+  OcrPromptContextSchema,
   OcrObservationSchema,
   PROJECT_FORMAT_COLUMNS,
   REQUIRED_COLUMNS,
@@ -93,6 +97,113 @@ export async function prepareImageOcrNode(state: WorkflowGraphState) {
   return execute();
 }
 
+export async function classifyOcrEventCandidatesNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó classify_ocr_event_candidates', {
+    ocrTextCount: state.ocrObservation?.texts.length ?? 0
+  });
+
+  const execute = traceStep(
+    async () => {
+      const ocrEventCandidates = OcrEventCandidatesSchema.parse(
+        buildOcrEventCandidates(state.ocrObservation)
+      );
+      await persistStageJson(state.outputDir, '00-ocr-event-candidates.json', ocrEventCandidates);
+
+      logger.info('Nó classify_ocr_event_candidates concluído com sucesso', {
+        trusted: ocrEventCandidates.trusted.length,
+        uncertain: ocrEventCandidates.uncertain.length
+      });
+
+      return {
+        ocrEventCandidates,
+        stepMetrics: buildStepMetricUpdate('classify_ocr_event_candidates', startedAt)
+      };
+    },
+    {
+      name: 'classify_ocr_event_candidates_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
+export async function composeOcrTextObservationsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó compose_ocr_text_observations', {
+    trusted: state.ocrEventCandidates?.trusted.length ?? 0,
+    uncertain: state.ocrEventCandidates?.uncertain.length ?? 0
+  });
+
+  const execute = traceStep(
+    async () => {
+      const ocrTextObservations = buildOcrTextObservations(state.ocrEventCandidates);
+      await persistStageJson(state.outputDir, '00-ocr-text-observations.json', ocrTextObservations);
+
+      logger.info('Nó compose_ocr_text_observations concluído com sucesso', {
+        textObservationCount: ocrTextObservations.length
+      });
+
+      return {
+        ocrTextObservations,
+        stepMetrics: buildStepMetricUpdate('compose_ocr_text_observations', startedAt)
+      };
+    },
+    {
+      name: 'compose_ocr_text_observations_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
+export async function composeObservePromptContextNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó compose_observe_prompt_context', {
+    trusted: state.ocrEventCandidates?.trusted.length ?? 0,
+    textObservationCount: state.ocrTextObservations.length
+  });
+
+  const execute = traceStep(
+    async () => {
+      const observePromptContext = OcrPromptContextSchema.parse(
+        buildObservePromptContext(state.ocrEventCandidates, state.ocrTextObservations, state.ocrObservation)
+      );
+      await persistStageJson(state.outputDir, '00-observe-prompt-context.json', observePromptContext);
+
+      logger.info('Nó compose_observe_prompt_context concluído com sucesso', {
+        protagonistEventCount: observePromptContext.protagonistEventTitles.length,
+        uncertainItemCount: observePromptContext.uncertainItems.length
+      });
+
+      return {
+        observePromptContext,
+        stepMetrics: buildStepMetricUpdate('compose_observe_prompt_context', startedAt)
+      };
+    },
+    {
+      name: 'compose_observe_prompt_context_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
 export async function observeImageNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
   const attempt = state.observeAttempts + 1;
@@ -105,7 +216,7 @@ export async function observeImageNode(state: WorkflowGraphState) {
 
   const prompt = await renderPrompt('observe-image.prompt.md', {
     feedback,
-    ocr_json: JSON.stringify(buildPromptOcrObservation(state.ocrObservation), null, 2)
+    ocr_context_json: JSON.stringify(state.observePromptContext, null, 2)
   });
 
   const execute = traceStep(
@@ -125,7 +236,8 @@ export async function observeImageNode(state: WorkflowGraphState) {
       await persistRawResponse(state.outputDir, '01-image-observation', attempt, parsedPayload);
 
       const observation = sanitizeImageObservation(
-        ImageObservationSchema.parse(parseJsonResponse(parsedPayload))
+        ImageObservationSchema.parse(parseJsonResponse(parsedPayload)),
+        state.observePromptContext
       );
       await persistStageJson(state.outputDir, '01-image-observation.json', observation);
 
@@ -625,8 +737,109 @@ async function persistRawResponse(outputDir: string, stagePrefix: string, attemp
   await writeTextFile(filePath, `${extractRawResponseText(payload)}\n`);
 }
 
-function sanitizeImageObservation(observation: ImageObservation): ImageObservation {
-  const textsOutsideShapes = uniqueStrings(observation.textsOutsideShapes);
+function buildOcrEventCandidates(ocrObservation: OcrObservation | null): OcrEventCandidates {
+  if (!ocrObservation) {
+    return { trusted: [], uncertain: [], assumptions: ['OCR técnico não estava disponível para classificar eventos protagonistas.'] };
+  }
+
+  const candidates = ocrObservation.texts.map((text) => {
+    const confidence = Number((text.confidence / 100).toFixed(3));
+    return {
+      eventTitle: text.text,
+      role: 'protagonist' as const,
+      colorHex: '#FF0000' as const,
+      confidence,
+      source: text.source,
+      bbox: text.bbox,
+      ocrAlternatives: text.ocrAlternatives,
+      ambiguousCharacters: text.ambiguousCharacters,
+      needsOcrReview: text.needsOcrReview,
+      reasoning: text.needsOcrReview
+        ? 'OCR clássico detectou texto vermelho técnico, mas a baixa confiança ou caracteres ambíguos exigem revisão visual.'
+        : 'OCR clássico detectou texto vermelho técnico com confiança suficiente; pela regra de cor, é candidato protagonista.'
+    };
+  });
+
+  const trusted = candidates.filter((candidate) => !candidate.needsOcrReview);
+  const uncertain = candidates.filter((candidate) => candidate.needsOcrReview);
+
+  return {
+    trusted,
+    uncertain,
+    assumptions: [
+      ...ocrObservation.assumptions,
+      'Eventos detectados por OCR nesta etapa cobrem apenas labels técnicas vermelhas; labels azuis, formas, setas e fluxo permanecem responsabilidade da observação multimodal.'
+    ]
+  };
+}
+
+function buildOcrTextObservations(ocrEventCandidates: OcrEventCandidates | null): ImageObservation['textObservations'] {
+  if (!ocrEventCandidates) {
+    return [];
+  }
+
+  return [...ocrEventCandidates.trusted, ...ocrEventCandidates.uncertain].map((candidate) => ({
+    text: candidate.eventTitle,
+    kind: candidate.needsOcrReview ? 'uncertain' as const : 'event_candidate' as const,
+    role: 'protagonist' as const,
+    colorHex: '#FF0000' as const,
+    confidence: candidate.confidence,
+    locationHint: locationHintFromBbox(candidate.bbox),
+    ocrAlternatives: candidate.ocrAlternatives,
+    ambiguousCharacters: candidate.ambiguousCharacters,
+    needsOcrReview: candidate.needsOcrReview,
+    reasoning: candidate.reasoning
+  }));
+}
+
+function buildObservePromptContext(
+  ocrEventCandidates: OcrEventCandidates | null,
+  ocrTextObservations: ImageObservation['textObservations'],
+  ocrObservation: OcrObservation | null
+): OcrPromptContext {
+  const trusted = ocrEventCandidates?.trusted ?? [];
+  const uncertain = ocrEventCandidates?.uncertain ?? [];
+
+  return {
+    protagonistEventTitles: trusted.map((candidate) => candidate.eventTitle),
+    textObservations: ocrTextObservations,
+    eventVisualSemantics: trusted.map((candidate) => ({
+      eventTitle: candidate.eventTitle,
+      role: 'protagonist' as const,
+      colorHex: '#FF0000' as const,
+      confidence: candidate.confidence,
+      reasoning: 'Classificação determinística: label técnica vermelha detectada por OCR clássico.'
+    })),
+    uncertainItems: uncertain.map((candidate) => candidate.eventTitle),
+    assumptions: [
+      ...(ocrEventCandidates?.assumptions ?? []),
+      ...(ocrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR: ${ocrObservation.preprocessedImage}`] : [])
+    ],
+    genAiResponsibilities: [
+      'Validar visualmente labels OCR marcadas como incertas usando a imagem original e crops de revisão.',
+      'Detectar labels azuis coadjuvantes que o OCR vermelho não cobre.',
+      'Detectar áreas, caixas operacionais internas, setas, estilos de seta e ordem de fluxo.',
+      'Associar eventos aos touch points e produzir flowsDetected/touchPointEventCorrelations.'
+    ]
+  };
+}
+
+function locationHintFromBbox(bbox: OcrEventCandidates['trusted'][number]['bbox']): string {
+  if (!bbox) {
+    return 'posição não informada pelo OCR';
+  }
+
+  return `bbox x=${bbox.x}, y=${bbox.y}, w=${bbox.width}, h=${bbox.height}`;
+}
+
+function sanitizeImageObservation(
+  observation: ImageObservation,
+  ocrPromptContext: OcrPromptContext | null = null
+): ImageObservation {
+  const textsOutsideShapes = uniqueStrings([
+    ...observation.textsOutsideShapes,
+    ...(ocrPromptContext?.protagonistEventTitles ?? [])
+  ]);
   const areasDetected = uniqueStrings(observation.areasDetected);
   const rawTouchPointsDetected = uniqueStrings(observation.touchPointsDetected);
   const touchPointsDetected = rawTouchPointsDetected.filter((touchPointTitle) => !textsOutsideShapes.includes(touchPointTitle));
@@ -649,7 +862,7 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     areasDetected,
     touchPointsDetected,
     textsOutsideShapes,
-    textObservations: observation.textObservations
+    textObservations: mergeTextObservations(ocrPromptContext?.textObservations ?? [], observation.textObservations)
       .map((textObservation) => ({
         ...textObservation,
         text: textObservation.text.trim(),
@@ -659,7 +872,7 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
         reasoning: textObservation.reasoning.trim()
       }))
       .filter((textObservation) => textObservation.text !== ''),
-    eventVisualSemantics: observation.eventVisualSemantics
+    eventVisualSemantics: mergeEventVisualSemantics(ocrPromptContext?.eventVisualSemantics ?? [], observation.eventVisualSemantics)
       .map((semantic) => ({
         ...semantic,
         eventTitle: semantic.eventTitle.trim(),
@@ -687,8 +900,44 @@ function sanitizeImageObservation(observation: ImageObservation): ImageObservati
     actorsDetected: uniqueStrings(observation.actorsDetected),
     servicesDetected: uniqueStrings(observation.servicesDetected),
     uncertainItems,
-    assumptions: buildObservationAssumptions(uncertainItems, droppedTouchPoints, touchPointReassignments)
+    assumptions: uniqueStrings([
+      ...buildObservationAssumptions(uncertainItems, droppedTouchPoints, touchPointReassignments),
+      ...(ocrPromptContext?.assumptions ?? []),
+      ...observation.assumptions
+    ])
   };
+}
+
+function mergeTextObservations(
+  deterministic: ImageObservation['textObservations'],
+  observed: ImageObservation['textObservations']
+): ImageObservation['textObservations'] {
+  const byText = new Map<string, ImageObservation['textObservations'][number]>();
+  for (const item of deterministic) {
+    byText.set(item.text.trim(), item);
+  }
+  for (const item of observed) {
+    const key = item.text.trim();
+    const current = byText.get(key);
+    byText.set(key, current && current.confidence >= item.confidence ? current : item);
+  }
+  return [...byText.values()];
+}
+
+function mergeEventVisualSemantics(
+  deterministic: ImageObservation['eventVisualSemantics'],
+  observed: ImageObservation['eventVisualSemantics']
+): ImageObservation['eventVisualSemantics'] {
+  const byTitle = new Map<string, ImageObservation['eventVisualSemantics'][number]>();
+  for (const item of deterministic) {
+    byTitle.set(item.eventTitle.trim(), item);
+  }
+  for (const item of observed) {
+    const key = item.eventTitle.trim();
+    const current = byTitle.get(key);
+    byTitle.set(key, current && current.confidence >= item.confidence ? current : item);
+  }
+  return [...byTitle.values()];
 }
 
 function deriveTouchPointAssignment(
@@ -866,26 +1115,6 @@ function roleFromColor(
     return 'supporting';
   }
   return fallbackRole;
-}
-
-function buildPromptOcrObservation(ocrObservation: OcrObservation | null): OcrObservation | null {
-  if (!ocrObservation) {
-    return null;
-  }
-
-  const trustedTexts = ocrObservation.texts.filter((text) => !text.needsOcrReview);
-  const withheldTexts = ocrObservation.texts.filter((text) => text.needsOcrReview);
-
-  return {
-    ...ocrObservation,
-    texts: trustedTexts,
-    assumptions: [
-      ...ocrObservation.assumptions,
-      ...withheldTexts.map((text) =>
-        `OCR leu '${text.text}' com baixa confiança e essa leitura foi omitida do OCR primário enviado ao agente; use a imagem original para transcrever essa região.`
-      )
-    ]
-  };
 }
 
 function buildOcrReviewImageContent(ocrObservation: OcrObservation | null) {

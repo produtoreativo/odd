@@ -45,12 +45,40 @@ export const OcrObservationSchema = z.object({
   assumptions: z.array(z.string())
 });
 
+export const OcrEventCandidateSchema = z.object({
+  eventTitle: z.string().min(1),
+  role: z.literal('protagonist'),
+  colorHex: z.literal('#FF0000'),
+  confidence: z.number().min(0).max(1),
+  source: z.string().min(1),
+  bbox: OcrTextSchema.shape.bbox,
+  ocrAlternatives: z.array(z.string().min(1)).default([]),
+  ambiguousCharacters: z.array(z.string().min(1)).default([]),
+  needsOcrReview: z.boolean(),
+  reasoning: z.string().min(1)
+});
+
+export const OcrEventCandidatesSchema = z.object({
+  trusted: z.array(OcrEventCandidateSchema),
+  uncertain: z.array(OcrEventCandidateSchema),
+  assumptions: z.array(z.string())
+});
+
 export const EventVisualSemanticSchema = z.object({
   eventTitle: z.string().min(1),
   role: ObservedEventRoleSchema,
   colorHex: ObservedColorSchema,
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1)
+});
+
+export const OcrPromptContextSchema = z.object({
+  protagonistEventTitles: z.array(z.string().min(1)),
+  textObservations: z.array(ObservedTextSchema),
+  eventVisualSemantics: z.array(EventVisualSemanticSchema),
+  uncertainItems: z.array(z.string().min(1)),
+  assumptions: z.array(z.string()),
+  genAiResponsibilities: z.array(z.string().min(1))
 });
 
 export const TouchPointCorrelationSchema = z.object({
@@ -188,6 +216,8 @@ export const PROJECT_FORMAT_COLUMNS = [
 
 export type ImageObservation = z.infer<typeof ImageObservationSchema>;
 export type OcrObservation = z.infer<typeof OcrObservationSchema>;
+export type OcrEventCandidates = z.infer<typeof OcrEventCandidatesSchema>;
+export type OcrPromptContext = z.infer<typeof OcrPromptContextSchema>;
 export type CandidateContext = z.infer<typeof CandidateContextSchema>;
 export type NormalizationReview = z.infer<typeof NormalizationReviewSchema>;
 export type RecognizedContext = z.infer<typeof RecognizedContextSchema>;

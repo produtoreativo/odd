@@ -2,7 +2,9 @@ import { Annotation } from '@langchain/langgraph';
 import {
   CandidateContext,
   ImageObservation,
+  OcrEventCandidates,
   OcrObservation,
+  OcrPromptContext,
   RecognizedContext,
   WorkbookPayload
 } from '../../domain/event-storming-schema.js';
@@ -10,6 +12,9 @@ import { SupportedProvider } from '../../infrastructure/llm/chat-model-factory.j
 
 export type WorkflowStepName =
   | 'prepare_image_ocr'
+  | 'classify_ocr_event_candidates'
+  | 'compose_ocr_text_observations'
+  | 'compose_observe_prompt_context'
   | 'observe_image'
   | 'validate_image_observation'
   | 'extract_events'
@@ -47,6 +52,9 @@ export const GraphState = Annotation.Root({
   normalizeFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
   workbookFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
   ocrObservation: Annotation<OcrObservation | null>({ default: () => null, reducer: (_, right) => right }),
+  ocrEventCandidates: Annotation<OcrEventCandidates | null>({ default: () => null, reducer: (_, right) => right }),
+  ocrTextObservations: Annotation<ImageObservation['textObservations']>({ default: () => [], reducer: (_, right) => right }),
+  observePromptContext: Annotation<OcrPromptContext | null>({ default: () => null, reducer: (_, right) => right }),
   imageObservation: Annotation<ImageObservation | null>({ default: () => null, reducer: (_, right) => right }),
   candidateContext: Annotation<CandidateContext | null>({ default: () => null, reducer: (_, right) => right }),
   standardizedContext: Annotation<RecognizedContext | null>({ default: () => null, reducer: (_, right) => right }),

@@ -39,6 +39,7 @@ Regra de representação dos eventos:
 Regras de composição:
 - responda apenas JSON
 - JSON estrito: sem comentários, sem markdown, sem texto fora do JSON, sem trailing commas
+- `dashboardTitle` deve ser exatamente igual ao `dashboardTitle` recebido na entrada
 - use somente `eventKey` existentes
 - use somente `occurrenceKey` existentes em `flowOccurrences`
 - para widgets negativos, `sourceEventKeys` deve usar o `eventKey` com `_exception`

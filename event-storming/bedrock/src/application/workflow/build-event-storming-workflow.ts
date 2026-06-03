@@ -4,6 +4,9 @@ import {
   createWorkbookNode,
   extractEventsNode,
   failNode,
+  classifyOcrEventCandidatesNode,
+  composeObservePromptContextNode,
+  composeOcrTextObservationsNode,
   observeImageNode,
   normalizeContextNode,
   prepareImageOcrNode,
@@ -28,6 +31,9 @@ export function buildEventStormingWorkflow() {
 
   return new StateGraph(GraphState)
     .addNode('prepare_image_ocr', prepareImageOcrNode)
+    .addNode('classify_ocr_event_candidates', classifyOcrEventCandidatesNode)
+    .addNode('compose_ocr_text_observations', composeOcrTextObservationsNode)
+    .addNode('compose_observe_prompt_context', composeObservePromptContextNode)
     .addNode('observe_image', observeImageNode)
     .addNode('validate_image_observation', validateImageObservationNode)
     .addNode('extract_events', extractEventsNode)
@@ -38,7 +44,10 @@ export function buildEventStormingWorkflow() {
     .addNode('validate_workbook', validateWorkbookNode)
     .addNode('fail', failNode)
     .addConditionalEdges(START, routeFromStart)
-    .addEdge('prepare_image_ocr', 'observe_image')
+    .addEdge('prepare_image_ocr', 'classify_ocr_event_candidates')
+    .addEdge('classify_ocr_event_candidates', 'compose_ocr_text_observations')
+    .addEdge('compose_ocr_text_observations', 'compose_observe_prompt_context')
+    .addEdge('compose_observe_prompt_context', 'observe_image')
     .addEdge('observe_image', 'validate_image_observation')
     .addConditionalEdges('validate_image_observation', routeAfterObservation)
     .addEdge('extract_events', 'validate_candidate_events')
