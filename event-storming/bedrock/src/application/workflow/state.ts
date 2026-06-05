@@ -13,36 +13,8 @@ import {
 } from '../../domain/event-storming-schema.js';
 import { SupportedProvider } from '../../infrastructure/llm/chat-model-factory.js';
 import { SupportedLocale, t } from '../../shared/i18n.js';
-
-export type WorkflowStepName =
-  | 'prepare_image_ocr'
-  | 'prepare_supporting_ocr'
-  | 'classify_ocr_event_candidates'
-  | 'detect_shape_geometry'
-  | 'detect_arrow_geometry'
-  | 'extract_flow_legends'
-  | 'compose_spatial_observation'
-  | 'compose_ocr_text_observations'
-  | 'compose_observe_prompt_context'
-  | 'compose_deterministic_image_observation'
-  | 'validate_image_observation'
-  | 'extract_events'
-  | 'validate_candidate_events'
-  | 'normalize_context'
-  | 'validate_normalization'
-  | 'create_workbook'
-  | 'validate_workbook'
-  | 'fail';
-
-export type WorkflowEndAt = Exclude<WorkflowStepName, 'fail'>;
-
-export type WorkflowStepMetrics = {
-  executions: number;
-  durationMs: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-};
+import { WorkflowEndAt, WorkflowStepName } from './steps.js';
+import { mergeStepMetrics, WorkflowStepMetrics } from './metrics.js';
 
 export const GraphState = Annotation.Root({
   inputImage: Annotation<string>(),
@@ -86,23 +58,3 @@ export const GraphState = Annotation.Root({
 });
 
 export type WorkflowGraphState = typeof GraphState.State;
-
-function mergeStepMetrics(
-  left: Partial<Record<WorkflowStepName, WorkflowStepMetrics>>,
-  right: Partial<Record<WorkflowStepName, WorkflowStepMetrics>>
-): Partial<Record<WorkflowStepName, WorkflowStepMetrics>> {
-  const merged: Partial<Record<WorkflowStepName, WorkflowStepMetrics>> = { ...left };
-
-  for (const [stepName, metrics] of Object.entries(right) as Array<[WorkflowStepName, WorkflowStepMetrics]>) {
-    const current = merged[stepName];
-    merged[stepName] = {
-      executions: (current?.executions ?? 0) + metrics.executions,
-      durationMs: (current?.durationMs ?? 0) + metrics.durationMs,
-      inputTokens: (current?.inputTokens ?? 0) + metrics.inputTokens,
-      outputTokens: (current?.outputTokens ?? 0) + metrics.outputTokens,
-      totalTokens: (current?.totalTokens ?? 0) + metrics.totalTokens
-    };
-  }
-
-  return merged;
-}

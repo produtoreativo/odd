@@ -25,9 +25,9 @@ import {
 import { Logger } from '../../shared/logger.js';
 import { formatError } from '../../shared/errors.js';
 import { renderPrompt } from '../../infrastructure/filesystem/prompt-repository.js';
-import { buildChatModel, ModelUsage } from '../../infrastructure/llm/chat-model-factory.js';
+import { buildChatModel } from '../../infrastructure/llm/chat-model-factory.js';
 import { imageContentFromFile } from '../../infrastructure/llm/image-message.js';
-import { extractRawResponseText, parseJsonResponse } from '../../infrastructure/llm/json-response-parser.js';
+import { parseJsonResponse } from '../../infrastructure/llm/json-response-parser.js';
 import {
   canonicalizeContext,
   applyNormalizationReview,
@@ -42,10 +42,11 @@ import {
   validateRecognizedContext,
   validateWorkbook
 } from '../../domain/context-validator.js';
-import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
+import { WorkflowGraphState } from './state.js';
+import { buildStepMetricUpdate } from './metrics.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
-import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
 import { getLocale, t } from '../../shared/i18n.js';
+import { persistRawResponse, persistStageJson } from './artifacts.js';
 import {
   detectArrowGeometry,
   detectShapeGeometry,
@@ -620,10 +621,6 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
   return execute();
 }
 
-export async function validateExtractionNode(state: WorkflowGraphState) {
-  return validateCandidateEventsNode(state);
-}
-
 export async function normalizeContextNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
   const candidateContext = state.candidateContext;
@@ -888,16 +885,6 @@ export async function failNode(state: WorkflowGraphState) {
   );
 
   return execute();
-}
-
-async function persistStageJson(outputDir: string, fileName: string, payload: unknown): Promise<void> {
-  const filePath = path.join(outputDir, fileName);
-  await writeJsonFile(filePath, payload);
-}
-
-async function persistRawResponse(outputDir: string, stagePrefix: string, attempt: number, payload: unknown): Promise<void> {
-  const filePath = path.join(outputDir, `${stagePrefix}.attempt-${attempt}.raw.txt`);
-  await writeTextFile(filePath, `${extractRawResponseText(payload)}\n`);
 }
 
 function buildOcrEventCandidates(
@@ -2250,20 +2237,4 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
       detail: assumption
     }))
   ];
-}
-
-function buildStepMetricUpdate(
-  stepName: WorkflowStepName,
-  startedAt: number,
-  usage?: ModelUsage
-): Partial<Record<WorkflowStepName, WorkflowStepMetrics>> {
-  return {
-    [stepName]: {
-      executions: 1,
-      durationMs: Date.now() - startedAt,
-      inputTokens: usage?.inputTokens ?? 0,
-      outputTokens: usage?.outputTokens ?? 0,
-      totalTokens: usage?.totalTokens ?? 0
-    }
-  };
 }

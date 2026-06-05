@@ -5,10 +5,12 @@ import { buildEventStormingWorkflow } from './workflow/build-event-storming-work
 import { ensureDir, readJsonFile, writeJsonFile } from '../infrastructure/filesystem/file-system.js';
 import { writeWorkbook } from '../infrastructure/filesystem/workbook-writer.js';
 import { traceStep } from '../infrastructure/langsmith/tracing.js';
-import { resolveAgentModels } from '../infrastructure/llm/agent-model-resolver.js';
+import { AgentModels, resolveAgentModels } from '../infrastructure/llm/agent-model-resolver.js';
 import { CandidateContextSchema, ImageObservationSchema } from '../domain/event-storming-schema.js';
-import { WorkflowStepMetrics, WorkflowStepName } from './workflow/state.js';
 import { setLocale, t } from '../shared/i18n.js';
+import { buildWorkflowSummary } from './workflow/metrics.js';
+import { shouldRequireState } from './workflow/steps.js';
+import { WorkflowGraphState } from './workflow/state.js';
 
 const logger = new Logger('run-event-storming-workflow');
 
@@ -38,54 +40,11 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   await ensureDir(args.outputDir);
   const workflow = buildEventStormingWorkflow();
   const invokeWorkflow = traceStep(
-    async () => workflow.invoke(
-      {
-        inputImage: args.inputImage,
-        outputDir: args.outputDir,
-        env: args.env,
-        provider: args.provider,
-        locale: args.locale,
-        startFrom: args.startFrom,
-        endAt: args.endAt,
-        extractModel: agentModels.extractModel,
-        normalizeModel: agentModels.normalizeModel,
-        maxAttempts: args.maxAttempts,
-        extractFeedback: t('feedback.none'),
-        normalizeFeedback: t('feedback.none'),
-        workbookFeedback: t('feedback.none'),
-        ocrObservation: null,
-        supportingOcrObservation: null,
-        ocrEventCandidates: null,
-        shapeGeometry: null,
-        arrowDetections: null,
-        flowLegendDetections: null,
-        spatialObservation: null,
-        ocrTextObservations: [],
-        observePromptContext: null,
-        deterministicImageObservation: null,
-        imageObservation: preloadedState.imageObservation,
-        candidateContext: preloadedState.candidateContext
-      },
-      {
-        runName: 'event_storming_graph',
-        tags: ['workflow', `provider:${args.provider}`],
-        metadata: {
-          inputImage: args.inputImage,
-          outputRoot: args.outputRoot,
-          outputDir: args.outputDir,
-          workflowKey: args.workflowKey,
-          runId: args.runId,
-          env: args.env,
-          provider: args.provider,
-          locale: args.locale,
-          startFrom: args.startFrom,
-          endAt: args.endAt,
-          extractModel: agentModels.extractModel,
-          normalizeModel: agentModels.normalizeModel,
-          maxAttempts: args.maxAttempts
-        }
-      }
-    ),
+    async () => workflow.invoke(buildInitialWorkflowState(args, agentModels, preloadedState), {
+      runName: 'event_storming_graph',
+      tags: ['workflow', `provider:${args.provider}`],
+      metadata: buildWorkflowTraceMetadata(args, agentModels)
+    }),
     {
       name: 'event_storming_workflow',
       runType: 'chain',
@@ -105,6 +64,70 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   const workflowSummary = buildWorkflowSummary(result.stepMetrics, workflowStartedAt);
   logger.info(t('log.workflow.summary'), workflowSummary);
 
+  assertRequiredStates(args, result);
+  const outputPaths = buildOutputPaths(args.outputDir);
+  await persistWorkflowOutputs(args, agentModels, result, outputPaths);
+  logger.info('Workflow finalizado com sucesso', outputPaths);
+}
+
+type PreloadedState = {
+  imageObservation: ReturnType<typeof ImageObservationSchema.parse> | null;
+  candidateContext: ReturnType<typeof CandidateContextSchema.parse> | null;
+};
+
+function buildInitialWorkflowState(
+  args: CliArgs,
+  agentModels: AgentModels,
+  preloadedState: PreloadedState
+): Partial<WorkflowGraphState> {
+  return {
+    inputImage: args.inputImage,
+    outputDir: args.outputDir,
+    env: args.env,
+    provider: args.provider,
+    locale: args.locale,
+    startFrom: args.startFrom,
+    endAt: args.endAt,
+    extractModel: agentModels.extractModel,
+    normalizeModel: agentModels.normalizeModel,
+    maxAttempts: args.maxAttempts,
+    extractFeedback: t('feedback.none'),
+    normalizeFeedback: t('feedback.none'),
+    workbookFeedback: t('feedback.none'),
+    ocrObservation: null,
+    supportingOcrObservation: null,
+    ocrEventCandidates: null,
+    shapeGeometry: null,
+    arrowDetections: null,
+    flowLegendDetections: null,
+    spatialObservation: null,
+    ocrTextObservations: [],
+    observePromptContext: null,
+    deterministicImageObservation: null,
+    imageObservation: preloadedState.imageObservation,
+    candidateContext: preloadedState.candidateContext
+  };
+}
+
+function buildWorkflowTraceMetadata(args: CliArgs, agentModels: AgentModels) {
+  return {
+    inputImage: args.inputImage,
+    outputRoot: args.outputRoot,
+    outputDir: args.outputDir,
+    workflowKey: args.workflowKey,
+    runId: args.runId,
+    env: args.env,
+    provider: args.provider,
+    locale: args.locale,
+    startFrom: args.startFrom,
+    endAt: args.endAt,
+    extractModel: agentModels.extractModel,
+    normalizeModel: agentModels.normalizeModel,
+    maxAttempts: args.maxAttempts
+  };
+}
+
+function assertRequiredStates(args: CliArgs, result: WorkflowGraphState): void {
   const requiredStates = {
     imageObservation: shouldRequireState(args.endAt, 'compose_deterministic_image_observation') && args.startFrom === 'observe'
       ? Boolean(result.imageObservation)
@@ -120,112 +143,94 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
       : true
   };
 
-  if (!requiredStates.imageObservation || !requiredStates.candidateContext || !requiredStates.standardizedContext || !requiredStates.workbook) {
-    logger.error(t('log.workflow.incomplete'), {
-      requiredStates,
-      failures: result.failures
-    });
-    throw new Error(t('error.workflowIncomplete', { failures: result.failures.join(' | ') }));
+  if (requiredStates.imageObservation && requiredStates.candidateContext && requiredStates.standardizedContext && requiredStates.workbook) {
+    return;
   }
 
-  const observationPath = path.join(args.outputDir, 'image-observation.json');
-  const metadataPath = path.join(args.outputDir, 'event-storming-metadata.json');
-  const ocrObservationPath = path.join(args.outputDir, 'ocr-observation.json');
-  const supportingOcrObservationPath = path.join(args.outputDir, 'ocr-supporting-observation.json');
-  const ocrEventCandidatesPath = path.join(args.outputDir, 'ocr-event-candidates.json');
-  const shapeGeometryPath = path.join(args.outputDir, 'shape-geometry.json');
-  const arrowDetectionsPath = path.join(args.outputDir, 'arrow-detections.json');
-  const flowLegendsPath = path.join(args.outputDir, 'flow-legends.json');
-  const spatialObservationPath = path.join(args.outputDir, 'spatial-observation.json');
-  const ocrTextObservationsPath = path.join(args.outputDir, 'ocr-text-observations.json');
-  const observePromptContextPath = path.join(args.outputDir, 'observe-prompt-context.json');
-  const deterministicImageObservationPath = path.join(args.outputDir, 'deterministic-image-observation.json');
-  const candidatePath = path.join(args.outputDir, 'candidate-events.json');
-  const recognizedPath = path.join(args.outputDir, 'recognized-context.json');
-  const standardizedPath = path.join(args.outputDir, 'standardized-context.json');
-  const workbookPath = path.join(args.outputDir, 'workbook.json');
-  const xlsxPath = path.join(args.outputDir, 'recognized-event-storming.xlsx');
+  logger.error(t('log.workflow.incomplete'), {
+    requiredStates,
+    failures: result.failures
+  });
+  throw new Error(t('error.workflowIncomplete', { failures: result.failures.join(' | ') }));
+}
 
-  await writeJsonFile(metadataPath, {
-    workflowKey: args.workflowKey,
-    runId: args.runId,
-    inputImage: args.inputImage,
-    outputRoot: args.outputRoot,
-    outputDir: args.outputDir,
-    provider: args.provider,
-    locale: args.locale,
-    env: args.env,
-    startFrom: args.startFrom,
-    endAt: args.endAt,
-    extractModel: agentModels.extractModel,
-    normalizeModel: agentModels.normalizeModel,
-    maxAttempts: args.maxAttempts,
+function buildOutputPaths(outputDir: string) {
+  return {
+    metadataPath: path.join(outputDir, 'event-storming-metadata.json'),
+    observationPath: path.join(outputDir, 'image-observation.json'),
+    ocrObservationPath: path.join(outputDir, 'ocr-observation.json'),
+    supportingOcrObservationPath: path.join(outputDir, 'ocr-supporting-observation.json'),
+    ocrEventCandidatesPath: path.join(outputDir, 'ocr-event-candidates.json'),
+    shapeGeometryPath: path.join(outputDir, 'shape-geometry.json'),
+    arrowDetectionsPath: path.join(outputDir, 'arrow-detections.json'),
+    flowLegendsPath: path.join(outputDir, 'flow-legends.json'),
+    spatialObservationPath: path.join(outputDir, 'spatial-observation.json'),
+    ocrTextObservationsPath: path.join(outputDir, 'ocr-text-observations.json'),
+    observePromptContextPath: path.join(outputDir, 'observe-prompt-context.json'),
+    deterministicImageObservationPath: path.join(outputDir, 'deterministic-image-observation.json'),
+    candidatePath: path.join(outputDir, 'candidate-events.json'),
+    recognizedPath: path.join(outputDir, 'recognized-context.json'),
+    standardizedPath: path.join(outputDir, 'standardized-context.json'),
+    workbookPath: path.join(outputDir, 'workbook.json'),
+    xlsxPath: path.join(outputDir, 'recognized-event-storming.xlsx')
+  };
+}
+
+async function persistWorkflowOutputs(
+  args: CliArgs,
+  agentModels: AgentModels,
+  result: WorkflowGraphState,
+  outputPaths: ReturnType<typeof buildOutputPaths>
+): Promise<void> {
+  await writeJsonFile(outputPaths.metadataPath, {
+    ...buildWorkflowTraceMetadata(args, agentModels),
     generatedAt: new Date().toISOString()
   });
+
   if (result.ocrObservation) {
-    await writeJsonFile(ocrObservationPath, result.ocrObservation);
+    await writeJsonFile(outputPaths.ocrObservationPath, result.ocrObservation);
   }
   if (result.supportingOcrObservation) {
-    await writeJsonFile(supportingOcrObservationPath, result.supportingOcrObservation);
+    await writeJsonFile(outputPaths.supportingOcrObservationPath, result.supportingOcrObservation);
   }
   if (result.ocrEventCandidates) {
-    await writeJsonFile(ocrEventCandidatesPath, result.ocrEventCandidates);
+    await writeJsonFile(outputPaths.ocrEventCandidatesPath, result.ocrEventCandidates);
   }
   if (result.shapeGeometry) {
-    await writeJsonFile(shapeGeometryPath, result.shapeGeometry);
+    await writeJsonFile(outputPaths.shapeGeometryPath, result.shapeGeometry);
   }
   if (result.arrowDetections) {
-    await writeJsonFile(arrowDetectionsPath, result.arrowDetections);
+    await writeJsonFile(outputPaths.arrowDetectionsPath, result.arrowDetections);
   }
   if (result.flowLegendDetections) {
-    await writeJsonFile(flowLegendsPath, result.flowLegendDetections);
+    await writeJsonFile(outputPaths.flowLegendsPath, result.flowLegendDetections);
   }
   if (result.spatialObservation) {
-    await writeJsonFile(spatialObservationPath, result.spatialObservation);
+    await writeJsonFile(outputPaths.spatialObservationPath, result.spatialObservation);
   }
   if (result.ocrTextObservations.length > 0) {
-    await writeJsonFile(ocrTextObservationsPath, result.ocrTextObservations);
+    await writeJsonFile(outputPaths.ocrTextObservationsPath, result.ocrTextObservations);
   }
   if (result.observePromptContext) {
-    await writeJsonFile(observePromptContextPath, result.observePromptContext);
+    await writeJsonFile(outputPaths.observePromptContextPath, result.observePromptContext);
   }
   if (result.deterministicImageObservation) {
-    await writeJsonFile(deterministicImageObservationPath, result.deterministicImageObservation);
+    await writeJsonFile(outputPaths.deterministicImageObservationPath, result.deterministicImageObservation);
   }
   if (result.imageObservation) {
-    await writeJsonFile(observationPath, result.imageObservation);
+    await writeJsonFile(outputPaths.observationPath, result.imageObservation);
   }
   if (result.candidateContext) {
-    await writeJsonFile(candidatePath, result.candidateContext);
+    await writeJsonFile(outputPaths.candidatePath, result.candidateContext);
   }
   if (result.standardizedContext) {
-    await writeJsonFile(recognizedPath, result.standardizedContext);
-    await writeJsonFile(standardizedPath, result.standardizedContext);
+    await writeJsonFile(outputPaths.recognizedPath, result.standardizedContext);
+    await writeJsonFile(outputPaths.standardizedPath, result.standardizedContext);
   }
   if (result.workbook) {
-    await writeJsonFile(workbookPath, result.workbook);
-    writeWorkbook(result.workbook, xlsxPath);
+    await writeJsonFile(outputPaths.workbookPath, result.workbook);
+    writeWorkbook(result.workbook, outputPaths.xlsxPath);
   }
-
-  logger.info('Workflow finalizado com sucesso', {
-    metadataPath,
-    observationPath,
-    ocrObservationPath,
-    supportingOcrObservationPath,
-    ocrEventCandidatesPath,
-    shapeGeometryPath,
-    arrowDetectionsPath,
-    flowLegendsPath,
-    spatialObservationPath,
-    ocrTextObservationsPath,
-    observePromptContextPath,
-    deterministicImageObservationPath,
-    candidatePath,
-    recognizedPath,
-    standardizedPath,
-    workbookPath,
-    xlsxPath
-  });
 }
 
 async function loadPreloadedState(args: CliArgs): Promise<{
@@ -258,72 +263,4 @@ async function loadPreloadedState(args: CliArgs): Promise<{
   const candidateContext = CandidateContextSchema.parse(await readJsonFile(args.candidateContext));
 
   return { imageObservation, candidateContext };
-}
-
-function shouldRequireState(endAt: WorkflowStepName, requiredAfter: WorkflowStepName): boolean {
-  return workflowStepIndex(endAt) >= workflowStepIndex(requiredAfter);
-}
-
-function workflowStepIndex(stepName: WorkflowStepName): number {
-  const index = ORDERED_WORKFLOW_STEPS.indexOf(stepName);
-  return index === -1 ? Number.POSITIVE_INFINITY : index;
-}
-
-const ORDERED_WORKFLOW_STEPS: WorkflowStepName[] = [
-  'prepare_image_ocr',
-  'prepare_supporting_ocr',
-  'classify_ocr_event_candidates',
-  'detect_shape_geometry',
-  'detect_arrow_geometry',
-  'extract_flow_legends',
-  'compose_spatial_observation',
-  'compose_ocr_text_observations',
-  'compose_observe_prompt_context',
-  'compose_deterministic_image_observation',
-  'validate_image_observation',
-  'extract_events',
-  'validate_candidate_events',
-  'normalize_context',
-  'validate_normalization',
-  'create_workbook',
-  'validate_workbook',
-  'fail'
-];
-
-function buildWorkflowSummary(
-  stepMetrics: Partial<Record<WorkflowStepName, WorkflowStepMetrics>> | undefined,
-  workflowStartedAt: number
-) {
-  const totalDurationMs = Date.now() - workflowStartedAt;
-  const orderedSteps = ORDERED_WORKFLOW_STEPS;
-
-  const steps = orderedSteps
-    .map((stepName) => {
-      const metrics = stepMetrics?.[stepName];
-      if (!metrics) {
-        return null;
-      }
-
-      return {
-        step: stepName,
-        executions: metrics.executions,
-        durationMs: metrics.durationMs,
-        durationSeconds: Number((metrics.durationMs / 1000).toFixed(3)),
-        inputTokens: metrics.inputTokens,
-        outputTokens: metrics.outputTokens,
-        totalTokens: metrics.totalTokens
-      };
-    })
-    .filter((step): step is NonNullable<typeof step> => step !== null);
-
-  const totalTokens = steps.reduce((sum, step) => sum + step.totalTokens, 0);
-
-  return {
-    totalDurationMs,
-    totalDurationSeconds: Number((totalDurationMs / 1000).toFixed(3)),
-    totalTokens,
-    totalInputTokens: steps.reduce((sum, step) => sum + step.inputTokens, 0),
-    totalOutputTokens: steps.reduce((sum, step) => sum + step.outputTokens, 0),
-    steps
-  };
 }
