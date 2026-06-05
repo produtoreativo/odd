@@ -12,7 +12,6 @@ import {
   detectArrowGeometryNode,
   detectShapeGeometryNode,
   extractFlowLegendsNode,
-  observeImageNode,
   normalizeContextNode,
   prepareImageOcrNode,
   prepareSupportingOcrNode,
@@ -47,7 +46,6 @@ export function buildEventStormingWorkflow() {
     .addNode('compose_ocr_text_observations', composeOcrTextObservationsNode)
     .addNode('compose_observe_prompt_context', composeObservePromptContextNode)
     .addNode('compose_deterministic_image_observation', composeDeterministicImageObservationNode)
-    .addNode('observe_image', observeImageNode)
     .addNode('validate_image_observation', validateImageObservationNode)
     .addNode('extract_events', extractEventsNode)
     .addNode('validate_candidate_events', validateCandidateEventsNode)
@@ -67,7 +65,6 @@ export function buildEventStormingWorkflow() {
     .addConditionalEdges('compose_ocr_text_observations', routeAfterStep('compose_ocr_text_observations', 'compose_observe_prompt_context'))
     .addConditionalEdges('compose_observe_prompt_context', routeAfterStep('compose_observe_prompt_context', 'compose_deterministic_image_observation'))
     .addConditionalEdges('compose_deterministic_image_observation', routeAfterStep('compose_deterministic_image_observation', 'validate_image_observation'))
-    .addConditionalEdges('observe_image', routeAfterStep('observe_image', 'validate_image_observation'))
     .addConditionalEdges('validate_image_observation', routeAfterObservation)
     .addConditionalEdges('extract_events', routeAfterStep('extract_events', 'validate_candidate_events'))
     .addConditionalEdges('validate_candidate_events', routeAfterExtraction)

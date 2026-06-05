@@ -30,7 +30,6 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     locale: args.locale,
     startFrom: args.startFrom,
     endAt: args.endAt,
-    observeModel: agentModels.observeModel,
     extractModel: agentModels.extractModel,
     normalizeModel: agentModels.normalizeModel,
     maxAttempts: args.maxAttempts
@@ -48,11 +47,9 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         locale: args.locale,
         startFrom: args.startFrom,
         endAt: args.endAt,
-        observeModel: agentModels.observeModel,
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         maxAttempts: args.maxAttempts,
-        observeFeedback: t('feedback.none'),
         extractFeedback: t('feedback.none'),
         normalizeFeedback: t('feedback.none'),
         workbookFeedback: t('feedback.none'),
@@ -83,7 +80,6 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
           locale: args.locale,
           startFrom: args.startFrom,
           endAt: args.endAt,
-          observeModel: agentModels.observeModel,
           extractModel: agentModels.extractModel,
           normalizeModel: agentModels.normalizeModel,
           maxAttempts: args.maxAttempts
@@ -95,7 +91,6 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
       runType: 'chain',
       tags: ['workflow', `provider:${args.provider}`],
       metadata: {
-        observeModel: agentModels.observeModel,
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         provider: args.provider,
@@ -111,7 +106,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   logger.info(t('log.workflow.summary'), workflowSummary);
 
   const requiredStates = {
-    imageObservation: shouldRequireState(args.endAt, 'observe_image') && args.startFrom === 'observe'
+    imageObservation: shouldRequireState(args.endAt, 'compose_deterministic_image_observation') && args.startFrom === 'observe'
       ? Boolean(result.imageObservation)
       : true,
     candidateContext: shouldRequireState(args.endAt, 'extract_events') && args.startFrom !== 'normalize'
@@ -162,7 +157,6 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     env: args.env,
     startFrom: args.startFrom,
     endAt: args.endAt,
-    observeModel: agentModels.observeModel,
     extractModel: agentModels.extractModel,
     normalizeModel: agentModels.normalizeModel,
     maxAttempts: args.maxAttempts,
@@ -286,7 +280,6 @@ const ORDERED_WORKFLOW_STEPS: WorkflowStepName[] = [
   'compose_ocr_text_observations',
   'compose_observe_prompt_context',
   'compose_deterministic_image_observation',
-  'observe_image',
   'validate_image_observation',
   'extract_events',
   'validate_candidate_events',

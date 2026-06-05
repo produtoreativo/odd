@@ -451,92 +451,9 @@ export async function composeDeterministicImageObservationNode(state: WorkflowGr
   return execute();
 }
 
-export async function observeImageNode(state: WorkflowGraphState) {
-  const startedAt = Date.now();
-  const attempt = state.observeAttempts + 1;
-  const feedback = state.observeAttempts > 0 ? state.observeFeedback : t('feedback.none');
-  logger.info('Iniciando nó observe_image', {
-    attempt,
-    inputImage: state.inputImage,
-    feedbackLength: feedback.length
-  });
-
-  const prompt = await renderPrompt('observe-image.prompt.md', {
-    feedback,
-    ocr_context_json: JSON.stringify(state.observePromptContext, null, 2),
-    deterministic_observation_json: JSON.stringify(state.deterministicImageObservation, null, 2)
-  });
-
-  const execute = traceStep(
-    async () => {
-      const response = await buildChatModel(state.provider, state.observeModel).invoke([
-        new SystemMessage(prompt),
-	        new HumanMessage({
-	          content: [
-	            { type: 'text', text: `Arquivo de entrada: ${path.basename(state.inputImage)}` },
-	            { type: 'text', text: 'Observe a imagem e retorne apenas o JSON solicitado.' },
-	            imageContentFromFile(state.inputImage),
-	            ...buildOcrReviewImageContent(state.ocrObservation)
-	          ]
-	        })
-      ]);
-      const parsedPayload = response.content;
-      await persistRawResponse(state.outputDir, '01-image-observation', attempt, parsedPayload);
-
-      const observation = sanitizeImageObservation(
-        ImageObservationSchema.parse(parseJsonResponse(parsedPayload)),
-        state.observePromptContext
-      );
-      await persistStageJson(state.outputDir, '01-image-observation.json', observation);
-
-      logger.info('Nó observe_image concluído com sucesso', {
-        attempt,
-        touchPointCount: observation.touchPointsDetected.length,
-        outsideTextCount: observation.textsOutsideShapes.length,
-        usage: response.usage
-      });
-
-      return {
-        observeAttempts: attempt,
-        imageObservation: observation,
-        observeFeedback: t('feedback.none'),
-        stepMetrics: buildStepMetricUpdate('observe_image', startedAt, response.usage)
-      };
-    },
-    {
-      name: 'observe_image_node',
-      runType: 'chain',
-      tags: ['node', 'observe', `provider:${state.provider}`],
-      metadata: {
-        attempt,
-        model: state.observeModel,
-        provider: state.provider,
-        inputImage: state.inputImage
-      }
-    }
-  );
-
-  try {
-    return await execute();
-  } catch (error) {
-    const message = formatError(error);
-    logger.error('Falha no nó observe_image', { attempt, error: message });
-
-    return {
-      observeAttempts: attempt,
-      imageObservation: null,
-      observeFeedback: message,
-      stepMetrics: buildStepMetricUpdate('observe_image', startedAt),
-      failures: [`observe: ${message}`]
-    };
-  }
-}
-
 export async function validateImageObservationNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
-  logger.info('Iniciando nó validate_image_observation', {
-    observeAttempts: state.observeAttempts
-  });
+  logger.info('Iniciando nó validate_image_observation');
 
   const execute = traceStep(
     async () => {
@@ -544,7 +461,6 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       if (issues.length === 0) {
         logger.info('Validação da observação concluída sem erros');
         return {
-          observeFeedback: t('feedback.none'),
           stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt)
         };
       }
@@ -555,7 +471,6 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       });
 
       return {
-        observeFeedback: issues.join('\n'),
         stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt),
         failures: issues.map((issue) => `observe: ${issue}`)
       };
@@ -565,7 +480,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       runType: 'chain',
       tags: ['node', 'validate', 'observe'],
       metadata: {
-        attempt: state.observeAttempts
+        deterministic: true
       }
     }
   );
@@ -1931,16 +1846,16 @@ function normalizeTextObservationKind(
     return {
       ...textObservation,
       kind: 'structural',
-      reasoning: `${textObservation.reasoning} Normalizado para structural porque a label também aparecia como touch point.`
+      reasoning: `${textObservation.reasoning} ${t('observation.areaTextDemoted')}`
     };
   }
 
   if (textObservation.kind === 'touch_point') {
-    if (!hasEquivalent(textObservation.text, touchPointsDetected) || hasEquivalent(textObservation.text, areasDetected) || looksLikeContextEvidence(textObservation)) {
+    if (!hasEquivalent(textObservation.text, touchPointsDetected) || hasEquivalent(textObservation.text, areasDetected)) {
       return {
         ...textObservation,
         kind: 'structural',
-        reasoning: `${textObservation.reasoning} Normalizado para structural porque a evidência indicava área/contexto ou a label foi removida de touchPointsDetected.`
+        reasoning: `${textObservation.reasoning} ${t('observation.touchPointTextDemoted')}`
       };
     }
   }
@@ -1949,7 +1864,7 @@ function normalizeTextObservationKind(
     return {
       ...textObservation,
       kind: 'uncertain',
-      reasoning: `${textObservation.reasoning} Normalizado para uncertain porque não está em textsOutsideShapes ou colide com área/contexto.`
+      reasoning: `${textObservation.reasoning} ${t('observation.eventTextDemoted')}`
     };
   }
 
@@ -2014,16 +1929,6 @@ function equivalenceKey(value: string): string {
     .replace(/nga/g, 'nca')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-}
-
-function looksLikeContextEvidence(textObservation: ImageObservation['textObservations'][number]): boolean {
-  const evidence = [
-    textObservation.locationHint || '',
-    textObservation.reasoning || ''
-  ].join(' ');
-
-  return /\b(swimlane|raia|lane|área|area|dom[ií]nio|domain|sistema|system|agrupador|container|cont[eê]iner|contexto|estrutural|structural)\b/i
-    .test(evidence);
 }
 
 function mergeEventVisualSemantics(
@@ -2252,22 +2157,6 @@ function roleFromColor(
     return 'supporting';
   }
   return fallbackRole;
-}
-
-function buildOcrReviewImageContent(ocrObservation: OcrObservation | null) {
-  if (!ocrObservation) {
-    return [];
-  }
-
-  return ocrObservation.texts
-    .filter((text) => text.needsOcrReview && text.cropImage)
-    .flatMap((text, index) => [
-      {
-        type: 'text' as const,
-        text: t('ocr.reviewCrop', { index: index + 1 })
-      },
-      imageContentFromFile(text.cropImage as string)
-    ]);
 }
 
 function shouldUseDeterministicCandidateContext(

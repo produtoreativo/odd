@@ -4,7 +4,7 @@ Workflow em TypeScript com LangGraph para processar imagens de event storming us
 
 O fluxo executa:
 1. preparação OCR local de labels técnicas em vermelho;
-2. observação multimodal da imagem usando o OCR estruturado como evidência de texto;
+2. observação determinística da imagem usando OCR, geometria e heurísticas de fluxo;
 3. extração de eventos e fluxos candidatos com enriquecimento de metadados de projeto;
 4. normalização do contexto em formato de projeto;
 5. geração da planilha final no modelo usado em `odd/odd-orchestrator/samples/event-storming-tuangou-project-format.xlsx`.
@@ -47,7 +47,7 @@ npm run start -- \
   --output ./generated \
   --provider bedrock \
   --start-from extract \
-  --image-observation ./generated/payments/<run-id>/01-image-observation.json
+  --image-observation ./generated/payments/<run-id>/image-observation.json
 ```
 
 Para retomar a partir do agente 3:
@@ -60,7 +60,7 @@ npm run start -- \
   --provider bedrock \
   --start-from normalize \
   --candidate-context ./generated/payments/<run-id>/02-candidate-events.json \
-  --image-observation ./generated/payments/<run-id>/01-image-observation.json
+  --image-observation ./generated/payments/<run-id>/image-observation.json
 ```
 
 ## Argumentos
@@ -79,7 +79,6 @@ npm run start -- \
 - `--image-observation`: obrigatório com `--start-from extract`; recomendado com `--start-from normalize` para revisão OCR/semântica
 - `--candidate-context`: obrigatório com `--start-from normalize`
 - `--model`: fallback global para todos os agentes
-- `--observe-model`: override do modelo do agente de observação
 - `--extract-model`: override do modelo do agente de extração
 - `--normalize-model`: override do modelo do agente de normalização
 - `--max-attempts`: opcional, padrão `2`
@@ -92,7 +91,6 @@ Defina ao menos:
 AWS_REGION=us-east-1
 BEDROCK_REQUEST_TIMEOUT_MS=3600000
 EVENT_STORMING_DEFAULT_MODEL=amazon.nova-lite-v1:0
-EVENT_STORMING_OBSERVE_MODEL=amazon.nova-pro-v1:0
 EVENT_STORMING_EXTRACT_MODEL=amazon.nova-lite-v1:0
 EVENT_STORMING_NORMALIZE_MODEL=amazon.nova-lite-v1:0
 ```
@@ -107,10 +105,10 @@ As credenciais AWS podem vir do ambiente padrão do SDK:
 As saídas ficam dentro de `generated/<workflow-key>/<run-id>/`:
 
 - `event-storming-metadata.json`: metadados da execução, incluindo `workflowKey`, `runId`, modelos e paths
-- `01-image-observation.json`
+- `image-observation.json`: observação consolidada determinística usada pela extração
+- `deterministic-image-observation.json`: cópia explícita da observação determinística
 - `00-ocr-observation.json`: OCR local estruturado das labels técnicas detectadas
 - `00-ocr-red-labels.png`: imagem preprocessada para OCR de labels vermelhas
-- `01-image-observation.attempt-<n>.raw.txt`
 - `02-candidate-events.json`: eventos candidatos normalizados com `source_touch_point`, `stage`, `service` e `tags` aderentes ao contrato dos prompts
 - `02-candidate-events.attempt-<n>.raw.txt`
 - `03-standardized-context.json`: contexto reconhecido pronto para gerar a planilha final

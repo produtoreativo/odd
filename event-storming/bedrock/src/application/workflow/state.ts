@@ -25,7 +25,6 @@ export type WorkflowStepName =
   | 'compose_ocr_text_observations'
   | 'compose_observe_prompt_context'
   | 'compose_deterministic_image_observation'
-  | 'observe_image'
   | 'validate_image_observation'
   | 'extract_events'
   | 'validate_candidate_events'
@@ -53,15 +52,12 @@ export const GraphState = Annotation.Root({
   locale: Annotation<SupportedLocale>({ default: () => 'pt-BR', reducer: (_, right) => right }),
   startFrom: Annotation<'observe' | 'extract' | 'normalize'>(),
   endAt: Annotation<WorkflowEndAt>(),
-  observeModel: Annotation<string>(),
   extractModel: Annotation<string>(),
   normalizeModel: Annotation<string>(),
   maxAttempts: Annotation<number>(),
-  observeAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
   extractAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
   normalizeAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
   workbookAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
-  observeFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
   extractFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
   normalizeFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
   workbookFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),

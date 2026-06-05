@@ -41,8 +41,6 @@ export function routeAfterStep(stepName: keyof NonNullable<WorkflowGraphState['s
 export function routeAfterObservation(state: WorkflowGraphState) {
   const hasValidObservation = validateImageObservation(state.imageObservation).length === 0;
   logger.info('Avaliando transição após observação da imagem', {
-    observeAttempts: state.observeAttempts,
-    maxAttempts: state.maxAttempts,
     hasValidObservation
   });
 
@@ -51,9 +49,6 @@ export function routeAfterObservation(state: WorkflowGraphState) {
   }
   if (hasValidObservation) {
     return 'extract_events';
-  }
-  if (state.observeAttempts < state.maxAttempts) {
-    return 'observe_image';
   }
   return 'fail';
 }

@@ -15,7 +15,6 @@ export type CliArgs = {
   imageObservation?: string;
   candidateContext?: string;
   defaultModel?: string;
-  observeModel?: string;
   extractModel?: string;
   normalizeModel?: string;
   maxAttempts: number;
@@ -41,7 +40,6 @@ export function parseCliArgs(argv: string[]): CliArgs {
     imageObservation: optionalStringArg(rawArgs, 'image-observation'),
     candidateContext: optionalStringArg(rawArgs, 'candidate-context'),
     defaultModel: optionalStringArg(rawArgs, 'model'),
-    observeModel: optionalStringArg(rawArgs, 'observe-model'),
     extractModel: optionalStringArg(rawArgs, 'extract-model'),
     normalizeModel: optionalStringArg(rawArgs, 'normalize-model'),
     maxAttempts: toPositiveInteger(rawArgs['max-attempts'] ?? '2')
@@ -59,7 +57,6 @@ export type WorkflowEndAtArg =
   | 'compose_ocr_text_observations'
   | 'compose_observe_prompt_context'
   | 'compose_deterministic_image_observation'
-  | 'observe_image'
   | 'validate_image_observation'
   | 'extract_events'
   | 'validate_candidate_events'
@@ -141,7 +138,6 @@ const VALID_END_AT_STEPS: ReadonlySet<string> = new Set([
   'compose_ocr_text_observations',
   'compose_observe_prompt_context',
   'compose_deterministic_image_observation',
-  'observe_image',
   'validate_image_observation',
   'extract_events',
   'validate_candidate_events',
