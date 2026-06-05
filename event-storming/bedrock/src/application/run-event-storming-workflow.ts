@@ -8,15 +8,17 @@ import { traceStep } from '../infrastructure/langsmith/tracing.js';
 import { resolveAgentModels } from '../infrastructure/llm/agent-model-resolver.js';
 import { CandidateContextSchema, ImageObservationSchema } from '../domain/event-storming-schema.js';
 import { WorkflowStepMetrics, WorkflowStepName } from './workflow/state.js';
+import { setLocale, t } from '../shared/i18n.js';
 
 const logger = new Logger('run-event-storming-workflow');
 
 export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
+  setLocale(args.locale);
   const workflowStartedAt = Date.now();
   const agentModels = resolveAgentModels(args);
   const preloadedState = await loadPreloadedState(args);
 
-  logger.info('Iniciando execução do workflow', {
+  logger.info(t('log.workflow.start'), {
     inputImage: args.inputImage,
     outputRoot: args.outputRoot,
     outputDir: args.outputDir,
@@ -25,6 +27,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     legacyOutputDir: args.legacyOutputDir,
     env: args.env,
     provider: args.provider,
+    locale: args.locale,
     startFrom: args.startFrom,
     endAt: args.endAt,
     observeModel: agentModels.observeModel,
@@ -42,12 +45,17 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         outputDir: args.outputDir,
         env: args.env,
         provider: args.provider,
+        locale: args.locale,
         startFrom: args.startFrom,
         endAt: args.endAt,
         observeModel: agentModels.observeModel,
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         maxAttempts: args.maxAttempts,
+        observeFeedback: t('feedback.none'),
+        extractFeedback: t('feedback.none'),
+        normalizeFeedback: t('feedback.none'),
+        workbookFeedback: t('feedback.none'),
         ocrObservation: null,
         supportingOcrObservation: null,
         ocrEventCandidates: null,
@@ -72,6 +80,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
           runId: args.runId,
           env: args.env,
           provider: args.provider,
+          locale: args.locale,
           startFrom: args.startFrom,
           endAt: args.endAt,
           observeModel: agentModels.observeModel,
@@ -91,6 +100,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         normalizeModel: agentModels.normalizeModel,
         provider: args.provider,
         env: args.env,
+        locale: args.locale,
         startFrom: args.startFrom
       }
     }
@@ -98,7 +108,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
 
   const result = await invokeWorkflow();
   const workflowSummary = buildWorkflowSummary(result.stepMetrics, workflowStartedAt);
-  logger.info('Resumo final do workflow', workflowSummary);
+  logger.info(t('log.workflow.summary'), workflowSummary);
 
   const requiredStates = {
     imageObservation: shouldRequireState(args.endAt, 'observe_image') && args.startFrom === 'observe'
@@ -116,11 +126,11 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   };
 
   if (!requiredStates.imageObservation || !requiredStates.candidateContext || !requiredStates.standardizedContext || !requiredStates.workbook) {
-    logger.error('Workflow retornou estado incompleto', {
+    logger.error(t('log.workflow.incomplete'), {
       requiredStates,
       failures: result.failures
     });
-    throw new Error(`Workflow incompleto. Falhas: ${result.failures.join(' | ')}`);
+    throw new Error(t('error.workflowIncomplete', { failures: result.failures.join(' | ') }));
   }
 
   const observationPath = path.join(args.outputDir, 'image-observation.json');
@@ -148,6 +158,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     outputRoot: args.outputRoot,
     outputDir: args.outputDir,
     provider: args.provider,
+    locale: args.locale,
     env: args.env,
     startFrom: args.startFrom,
     endAt: args.endAt,

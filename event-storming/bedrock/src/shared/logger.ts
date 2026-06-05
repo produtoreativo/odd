@@ -1,3 +1,5 @@
+import { translateLogMessage } from './i18n.js';
+
 type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
 
 type LogPayload = Record<string, unknown>;
@@ -27,9 +29,10 @@ export class Logger {
 
   private write(level: LogLevel, message: string, payload?: LogPayload): void {
     const timestamp = new Date().toISOString();
+    const translatedMessage = translateLogMessage(message);
     const details = payload && Object.keys(payload).length > 0
       ? ` ${JSON.stringify(payload)}`
       : '';
-    console.log(`[${timestamp}] [${level}] [${this.scope}] ${message}${details}`);
+    console.log(`[${timestamp}] [${level}] [${this.scope}] ${translatedMessage}${details}`);
   }
 }

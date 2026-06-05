@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import Tesseract from 'tesseract.js';
 import { ArrowDetections, FlowLegendDetections, OcrObservation, ShapeGeometry } from '../../domain/event-storming-schema.js';
 import { Logger } from '../../shared/logger.js';
+import { t } from '../../shared/i18n.js';
 
 const logger = new Logger('technical-label-ocr');
 const require = createRequire(import.meta.url);
@@ -27,7 +28,7 @@ export async function recognizeTechnicalLabels(
   inputImage: string,
   options: OcrOptions
 ): Promise<OcrObservation> {
-  logger.info('Iniciando OCR técnico de labels', { inputImage });
+  logger.info(t('log.ocr.technical.start'), { inputImage });
 
   const preprocessedImage = path.join(options.outputDir, '00-ocr-red-labels.png');
   const scale = await createColorTextMask(inputImage, preprocessedImage, 'red');
@@ -36,7 +37,7 @@ export async function recognizeTechnicalLabels(
     lines.flatMap((line) => extractColoredLabelTexts(line, scale, 'ocr_red_labels', 'red'))
   ));
 
-  logger.info('OCR técnico concluído', {
+  logger.info(t('log.ocr.technical.done'), {
     inputImage,
     preprocessedImage,
     textCount: texts.length
@@ -47,7 +48,7 @@ export async function recognizeTechnicalLabels(
     preprocessedImage,
     texts,
     assumptions: texts.some((text) => text.needsOcrReview)
-      ? ['OCR detectou labels técnicas com baixa confiança ou caracteres ambíguos; use a imagem original para revisar antes de tratar como definitivo.']
+      ? [t('ocr.redLowConfidence')]
       : []
   };
 }
@@ -56,7 +57,7 @@ export async function recognizeSupportingLabels(
   inputImage: string,
   options: OcrOptions
 ): Promise<OcrObservation> {
-  logger.info('Iniciando OCR técnico de labels azuis', { inputImage });
+  logger.info(t('log.ocr.supporting.start'), { inputImage });
 
   const preprocessedImage = path.join(options.outputDir, '00-ocr-blue-labels.png');
   const scale = await createColorTextMask(inputImage, preprocessedImage, 'blue');
@@ -65,7 +66,7 @@ export async function recognizeSupportingLabels(
     lines.flatMap((line) => extractColoredLabelTexts(line, scale, 'ocr_blue_labels', 'blue'))
   ));
 
-  logger.info('OCR técnico azul concluído', {
+  logger.info(t('log.ocr.supporting.done'), {
     inputImage,
     preprocessedImage,
     textCount: texts.length
@@ -76,7 +77,7 @@ export async function recognizeSupportingLabels(
     preprocessedImage,
     texts,
     assumptions: texts.some((text) => text.needsOcrReview)
-      ? ['OCR azul detectou labels coadjuvantes com baixa confiança ou caracteres ambíguos; revise antes de tratar como definitivo.']
+      ? [t('ocr.blueLowConfidence')]
       : []
   };
 }
@@ -112,7 +113,7 @@ export async function recognizeFlowLegends(
     legends,
     ocrTexts,
     assumptions: legends.length === 0
-      ? ['OCR clássico não encontrou legenda explícita de fluxo; a ordem precisará usar geometria/setas ou revisão visual.']
+      ? [t('ocr.flowLegendMissing')]
       : []
   };
 }
@@ -135,7 +136,7 @@ export async function detectShapeGeometry(inputImage: string): Promise<ShapeGeom
       id: `shape_${index + 1}`,
       bbox: { x: component.x, y: component.y, width: component.width, height: component.height },
       confidence: rectangleConfidence(component),
-      reasoning: 'Componente conectado não branco, sem pixels dominantes de labels vermelhas/azuis ou setas escuras.'
+      reasoning: t('shape.componentReasoning')
     }));
   const candidates = reindexGeometryCandidates(mergeOverlappingGeometryCandidates(rawCandidates));
   const areaCandidates = candidates.filter((candidate) =>
@@ -155,8 +156,8 @@ export async function detectShapeGeometry(inputImage: string): Promise<ShapeGeom
     touchPointCandidates,
     areaCandidates,
     assumptions: [
-      'Detecção geométrica usa componentes conectados de regiões não brancas; retângulos sobrepostos são mesclados antes da classificação.',
-      'Labels textuais de touch points são extraídas por OCR localizado no crop de cada caixa quando possível.'
+      t('shape.geometryAssumption'),
+      t('shape.labelAssumption')
     ]
   };
 }
@@ -181,7 +182,7 @@ export async function detectArrowGeometry(inputImage: string): Promise<ArrowDete
       bbox: { x: component.x, y: component.y, width: component.width, height: component.height },
       direction: component.width >= component.height ? 'left_to_right' as const : 'top_to_bottom' as const,
       confidence: 0.62,
-      reasoning: 'Segmento escuro longo detectado por geometria clássica; tratado como seta sólida candidata.'
+      reasoning: t('arrow.solidReasoning')
     })),
     ...dashedGroups.map((group, index) => ({
       id: `arrow_dashed_${index + 1}`,
@@ -190,15 +191,15 @@ export async function detectArrowGeometry(inputImage: string): Promise<ArrowDete
       bbox: group.bbox,
       direction: group.bbox.width >= group.bbox.height ? 'left_to_right' as const : 'top_to_bottom' as const,
       confidence: 0.56,
-      reasoning: 'Múltiplos segmentos escuros pequenos alinhados foram agrupados como seta tracejada candidata.'
+      reasoning: t('arrow.dashedReasoning')
     }))
   ];
 
   return {
     arrows,
     assumptions: arrows.length === 0
-      ? ['Nenhuma seta foi detectada por geometria clássica com confiança mínima.']
-      : ['Setas são heurísticas por segmentos escuros; pontas de seta e direção podem exigir revisão visual.']
+      ? [t('arrow.none')]
+      : [t('arrow.assumption')]
   };
 }
 
@@ -445,7 +446,7 @@ function buildFlowLegendsFromOcr(ocrTexts: OcrObservation['texts']): FlowLegendD
       bbox: text.bbox,
       orderedEventTitles,
       confidence: orderedEventTitles.length > 0 ? 0.72 : 0.45,
-      reasoning: 'Cabeçalho de legenda de fluxo detectado por OCR geral; itens próximos abaixo foram tratados como ordem narrativa.'
+      reasoning: t('flow.legendHeaderReasoning')
     });
   }
 
@@ -488,7 +489,7 @@ async function labelTouchPointCandidates(
     return {
       ...candidate,
       label,
-      reasoning: `${candidate.reasoning} Label textual extraída por OCR localizado no crop da caixa.`
+      reasoning: `${candidate.reasoning} ${t('shape.labelCropReasoning')}`
     };
   }));
 }
@@ -628,7 +629,7 @@ function mergeOverlappingGeometryCandidates(candidates: GeometryCandidate[]): Ge
       ...existing,
       bbox: unionBbox(existing.bbox, candidate.bbox),
       confidence: Math.max(existing.confidence, candidate.confidence),
-      reasoning: `${existing.reasoning} Mesclado com ${candidate.id} por sobreposição geométrica.`
+      reasoning: `${existing.reasoning} ${t('shape.mergedReasoning', { id: candidate.id })}`
     };
   }
 

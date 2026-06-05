@@ -72,6 +72,8 @@ npm run start -- \
 - `--run-id`: identificador da execução; opcional, padrão `yyyyMMdd_HHmmss`
 - `--output-dir`: compatibilidade legada para diretório explícito de saída; prefira `--workflow-key` + `--output`
 - `--provider`: use `bedrock`
+- `--locale`: idioma das mensagens de log e textos explicativos determinísticos nos JSON; aceita `pt-BR` ou `en`, padrão `pt-BR`
+- `--language`: alias de `--locale`
 - `--env`: ambiente usado no `query_hint`; opcional, padrão `dev`
 - `--start-from`: `observe`, `extract` ou `normalize`
 - `--image-observation`: obrigatório com `--start-from extract`; recomendado com `--start-from normalize` para revisão OCR/semântica

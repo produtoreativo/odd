@@ -45,6 +45,7 @@ import {
 import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
+import { getLocale, t } from '../../shared/i18n.js';
 import {
   detectArrowGeometry,
   detectShapeGeometry,
@@ -453,7 +454,7 @@ export async function composeDeterministicImageObservationNode(state: WorkflowGr
 export async function observeImageNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
   const attempt = state.observeAttempts + 1;
-  const feedback = state.observeAttempts > 0 ? state.observeFeedback : 'Nenhum.';
+  const feedback = state.observeAttempts > 0 ? state.observeFeedback : t('feedback.none');
   logger.info('Iniciando nó observe_image', {
     attempt,
     inputImage: state.inputImage,
@@ -498,7 +499,7 @@ export async function observeImageNode(state: WorkflowGraphState) {
       return {
         observeAttempts: attempt,
         imageObservation: observation,
-        observeFeedback: 'Nenhum.',
+        observeFeedback: t('feedback.none'),
         stepMetrics: buildStepMetricUpdate('observe_image', startedAt, response.usage)
       };
     },
@@ -543,7 +544,7 @@ export async function validateImageObservationNode(state: WorkflowGraphState) {
       if (issues.length === 0) {
         logger.info('Validação da observação concluída sem erros');
         return {
-          observeFeedback: 'Nenhum.',
+          observeFeedback: t('feedback.none'),
           stepMetrics: buildStepMetricUpdate('validate_image_observation', startedAt)
         };
       }
@@ -587,7 +588,7 @@ export async function extractEventsNode(state: WorkflowGraphState) {
   });
 
   const prompt = await renderPrompt('extract-events.prompt.md', {
-    feedback: state.extractAttempts > 0 ? state.extractFeedback : 'Nenhum.',
+    feedback: state.extractAttempts > 0 ? state.extractFeedback : t('feedback.none'),
     input_json: JSON.stringify(imageObservation, null, 2)
   });
 
@@ -627,7 +628,7 @@ export async function extractEventsNode(state: WorkflowGraphState) {
       return {
         extractAttempts: attempt,
         candidateContext,
-        extractFeedback: 'Nenhum.',
+        extractFeedback: t('feedback.none'),
         stepMetrics: buildStepMetricUpdate('extract_events', startedAt, response.usage)
       };
     },
@@ -675,7 +676,7 @@ export async function validateCandidateEventsNode(state: WorkflowGraphState) {
       if (issues.length === 0) {
         logger.info('Validação dos candidatos concluída sem erros');
         return {
-          extractFeedback: 'Nenhum.',
+          extractFeedback: t('feedback.none'),
           stepMetrics: buildStepMetricUpdate('validate_candidate_events', startedAt)
         };
       }
@@ -722,7 +723,7 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
   });
 
   const prompt = await renderPrompt('normalize-context.prompt.md', {
-    feedback: state.normalizeAttempts > 0 ? state.normalizeFeedback : 'Nenhum.',
+    feedback: state.normalizeAttempts > 0 ? state.normalizeFeedback : t('feedback.none'),
     input_json: JSON.stringify(candidateContext, null, 2),
     observation_json: JSON.stringify(state.imageObservation ?? null, null, 2)
   });
@@ -763,7 +764,7 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
       return {
         normalizeAttempts: attempt,
         standardizedContext,
-        normalizeFeedback: 'Nenhum.',
+        normalizeFeedback: t('feedback.none'),
         stepMetrics: buildStepMetricUpdate('normalize_context', startedAt, response.usage)
       };
     },
@@ -813,7 +814,7 @@ export async function validateNormalizationNode(state: WorkflowGraphState) {
       if (issues.length === 0) {
         logger.info('Validação da normalização concluída sem erros');
         return {
-          normalizeFeedback: 'Nenhum.',
+          normalizeFeedback: t('feedback.none'),
           stepMetrics: buildStepMetricUpdate('validate_normalization', startedAt)
         };
       }
@@ -875,7 +876,7 @@ export async function createWorkbookNode(state: WorkflowGraphState) {
       return {
         workbookAttempts: attempt,
         workbook,
-        workbookFeedback: 'Nenhum.',
+        workbookFeedback: t('feedback.none'),
         stepMetrics: buildStepMetricUpdate('create_workbook', startedAt)
       };
     },
@@ -918,7 +919,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
       if (issues.length === 0) {
         logger.info('Validação do workbook concluída sem erros');
         return {
-          workbookFeedback: 'Nenhum.',
+          workbookFeedback: t('feedback.none'),
           stepMetrics: buildStepMetricUpdate('validate_workbook', startedAt)
         };
       }
@@ -949,7 +950,7 @@ export async function validateWorkbookNode(state: WorkflowGraphState) {
 
 export async function failNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
-  const lastFailure = state.failures.at(-1) ?? 'Workflow falhou sem detalhes.';
+  const lastFailure = state.failures.at(-1) ?? t('error.workflowNoDetails');
   logger.error('Encerrando workflow em fail', {
     failures: state.failures,
     lastFailure
@@ -991,7 +992,7 @@ function buildOcrEventCandidates(
   const redTexts = ocrObservation?.texts ?? [];
   const blueTexts = supportingOcrObservation?.texts ?? [];
   if (redTexts.length === 0 && blueTexts.length === 0) {
-    return { trusted: [], uncertain: [], assumptions: ['OCR técnico não estava disponível para classificar eventos por cor.'] };
+    return { trusted: [], uncertain: [], assumptions: [t('ocr.technicalUnavailable')] };
   }
 
   const candidates = [
@@ -1010,8 +1011,8 @@ function buildOcrEventCandidates(
       ambiguousCharacters: text.ambiguousCharacters,
       needsOcrReview: text.needsOcrReview,
       reasoning: text.needsOcrReview
-        ? `OCR clássico detectou texto ${role === 'protagonist' ? 'vermelho' : 'azul'} técnico, mas a baixa confiança ou caracteres ambíguos exigem revisão visual.`
-        : `OCR clássico detectou texto ${role === 'protagonist' ? 'vermelho' : 'azul'} técnico com confiança suficiente; pela regra de cor, é candidato ${role}.`
+        ? t('ocr.technicalReviewNeeded', { color: role === 'protagonist' ? translatedColor('red') : translatedColor('blue') })
+        : t('ocr.technicalTrusted', { color: role === 'protagonist' ? translatedColor('red') : translatedColor('blue'), role })
     };
   });
   const compactedCandidates = removeFragmentEventCandidates(candidates);
@@ -1026,9 +1027,9 @@ function buildOcrEventCandidates(
       ...(ocrObservation?.assumptions ?? []),
       ...(supportingOcrObservation?.assumptions ?? []),
       ...(compactedCandidates.length < candidates.length
-        ? [`${candidates.length - compactedCandidates.length} fragmento(s) de OCR foram removidos por estarem contidos em labels mais completas da mesma cor.`]
+        ? [t('ocr.fragmentsRemoved', { count: candidates.length - compactedCandidates.length })]
         : []),
-      'Eventos detectados por OCR nesta etapa cobrem labels técnicas vermelhas e azuis; formas, setas e fluxo são tratados por steps geométricos posteriores.'
+      t('ocr.eventsCoverage')
     ]
   };
 }
@@ -1120,13 +1121,13 @@ function buildSpatialObservation(
     touchPointEventCorrelations,
     flowsDetected,
     assumptions: [
-      'Composição espacial determinística usa proximidade entre bbox de evento e bbox de forma; relações podem precisar de revisão quando há sobreposição visual.',
+      t('spatial.assumption'),
       ...touchPointCandidates
         .filter((candidate) => !candidate.label)
-        .map((candidate) => `${candidate.id} não recebeu label textual confiável por OCR e foi nomeado por índice.`),
+        .map((candidate) => t('spatial.unlabeledShape', { id: candidate.id })),
       ...areaCandidates
         .filter((candidate) => !candidate.label)
-        .map((candidate) => `${candidate.id} não recebeu label textual confiável por OCR e foi nomeado por índice.`)
+        .map((candidate) => t('spatial.unlabeledShape', { id: candidate.id }))
     ]
   };
 }
@@ -1149,7 +1150,7 @@ function buildOcrTouchPointCandidates(
       label: normalizeTouchPointLabel(text.text),
       bbox: text.bbox as NonNullable<typeof text.bbox>,
       confidence: Number((text.confidence / 100).toFixed(3)),
-      reasoning: 'Touch point candidato criado por OCR textual confiável quando a geometria da caixa é ambígua.'
+      reasoning: t('touchPoint.ocrCandidateReasoning')
     }))
     .filter((candidate) => candidate.label && isReliableTouchPointLabel(candidate.label))
     .filter((candidate) => !hasEquivalent(candidate.label as string, eventTitles))
@@ -1577,7 +1578,7 @@ function buildSpatialCorrelations(
     touchPointTitle,
     eventsObservedAroundTouchPoint,
     confidence: 0.58,
-    reasoning: 'Correlação criada por menor distância entre bbox do evento OCR e bbox da caixa candidata.'
+    reasoning: t('correlation.nearestBbox')
   }));
 }
 
@@ -1598,7 +1599,7 @@ function buildSpatialFlows(
         .filter((eventTitle): eventTitle is string => Boolean(eventTitle)),
       touchPoints: touchPointsDetected,
       confidence: legend.confidence,
-      reasoning: 'Fluxo derivado deterministicamente da legenda OCR; touch points foram aproximados por geometria.'
+      reasoning: t('flow.legendReasoning')
     }))
     .filter((flow) => flow.orderedEventTitles.length > 0);
 
@@ -1621,15 +1622,15 @@ function buildSpatialFlows(
 
   const primaryArrow = arrowDetections?.arrows[0];
   return [{
-    name: primaryArrow?.flowType === 'alternate' ? 'Fluxo Alternativo Detectado' : 'Fluxo Principal Detectado',
+    name: primaryArrow?.flowType === 'alternate' ? t('flow.detectedAlternateName') : t('flow.detectedMainName'),
     flowType: primaryArrow?.flowType ?? 'unknown',
     arrowStyle: primaryArrow?.arrowStyle ?? 'unknown',
     orderedEventTitles,
     touchPoints: touchPointsDetected,
     confidence: primaryArrow ? 0.5 : 0.38,
     reasoning: primaryArrow
-      ? 'Fluxo ordenado por posição espacial dos eventos e anotado com a primeira seta detectada.'
-      : 'Fluxo ordenado por posição espacial dos eventos; nenhuma seta confiável foi detectada.'
+      ? t('flow.spatialWithArrow')
+      : t('flow.spatialNoArrow')
   }];
 }
 
@@ -1657,7 +1658,7 @@ function buildObservePromptContext(
       role: candidate.role,
       colorHex: candidate.colorHex,
       confidence: candidate.confidence,
-      reasoning: `Classificação determinística: label técnica ${candidate.role === 'protagonist' ? 'vermelha' : 'azul'} detectada por OCR clássico.`
+      reasoning: t('semantic.deterministicClassification', { color: candidate.role === 'protagonist' ? translatedColor('red') : translatedColor('blue') })
     })),
     touchPointCandidates: shapeGeometry?.touchPointCandidates ?? [],
     areaCandidates: shapeGeometry?.areaCandidates ?? [],
@@ -1667,17 +1668,17 @@ function buildObservePromptContext(
     uncertainItems: uncertain.map((candidate) => candidate.eventTitle),
     assumptions: [
       ...(ocrEventCandidates?.assumptions ?? []),
-      ...(ocrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR vermelho: ${ocrObservation.preprocessedImage}`] : []),
-      ...(supportingOcrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR azul: ${supportingOcrObservation.preprocessedImage}`] : []),
+      ...(ocrObservation?.preprocessedImage ? [t('ocr.preprocessedRed', { path: ocrObservation.preprocessedImage })] : []),
+      ...(supportingOcrObservation?.preprocessedImage ? [t('ocr.preprocessedBlue', { path: supportingOcrObservation.preprocessedImage })] : []),
       ...(shapeGeometry?.assumptions ?? []),
       ...(arrowDetections?.assumptions ?? []),
       ...(flowLegendDetections?.assumptions ?? []),
       ...(spatialObservation?.assumptions ?? [])
     ],
     genAiResponsibilities: [
-      'Validar visualmente itens com baixa confiança dos steps determinísticos.',
-      'Complementar labels ou estruturas que os detectores clássicos não tenham encontrado.',
-      'Resolver ambiguidades de direção de seta, nome de touch point e associação espacial quando a heurística não for suficiente.'
+      t('genai.reviewLowConfidence'),
+      t('genai.complementMissing'),
+      t('genai.resolveAmbiguities')
     ]
   };
 }
@@ -1748,7 +1749,7 @@ function buildDeterministicImageObservation(ocrPromptContext: OcrPromptContext |
     servicesDetected: [],
     uncertainItems: ocrPromptContext?.uncertainItems ?? [],
     assumptions: uniqueStrings([
-      'Observação gerada deterministicamente antes do prompt observe-image.',
+      t('observation.deterministicAssumption'),
       ...(ocrPromptContext?.assumptions ?? []),
       ...(spatial?.assumptions ?? [])
     ])
@@ -2219,7 +2220,7 @@ function rebuildTouchPointEventCorrelations(
         touchPointTitle,
         eventsObservedAroundTouchPoint: [],
         confidence: 0.7,
-        reasoning: 'Correlação reconstruída deterministicamente a partir de flowsDetected.orderedEventTitles e do papel de cada evento.'
+        reasoning: t('correlation.rebuilt')
       });
     }
   }
@@ -2263,7 +2264,7 @@ function buildOcrReviewImageContent(ocrObservation: OcrObservation | null) {
     .flatMap((text, index) => [
       {
         type: 'text' as const,
-        text: `Crop ampliado para revisão OCR ${index + 1}. Transcreva a label técnica visualmente; não use a hipótese OCR como definitiva.`
+        text: t('ocr.reviewCrop', { index: index + 1 })
       },
       imageContentFromFile(text.cropImage as string)
     ]);
@@ -2294,6 +2295,13 @@ function uniqueStrings(items: string[]): string[] {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 }
 
+function translatedColor(color: 'red' | 'blue'): string {
+  if (getLocale() === 'en') {
+    return color;
+  }
+  return color === 'red' ? 'vermelha' : 'azul';
+}
+
 function buildObservationAssumptions(
   uncertainItems: string[],
   droppedTouchPoints: string[] = [],
@@ -2303,18 +2311,18 @@ function buildObservationAssumptions(
 
   if (uncertainItems.length > 0) {
     assumptions.push(
-      `Os itens ${uncertainItems.map((item) => `'${item}'`).join(', ')} foram tratados como estruturais ou ambíguos e não como eventos.`
+      t('observation.uncertainItems', { items: uncertainItems.map((item) => `'${item}'`).join(', ') })
     );
   }
 
   if (droppedTouchPoints.length > 0) {
     assumptions.push(
-      `Os touch points ${droppedTouchPoints.map((item) => `'${item}'`).join(', ')} foram removidos por colidirem com labels de eventos outside; mantida apenas a leitura como evento.`
+      t('observation.droppedTouchPoints', { items: droppedTouchPoints.map((item) => `'${item}'`).join(', ') })
     );
   }
 
   if (touchPointReassignments.length > 0) {
-    logger.info('Reatribuições determinísticas de source_touch_point aplicadas', {
+    logger.info(t('log.workflow.reassignments'), {
       reassignments: touchPointReassignments
     });
   }
@@ -2330,19 +2338,19 @@ function buildWorkbookNotes(inputImage: string, assumptions: string[]) {
     },
     {
       item: 'mapping_stage',
-      detail: 'stage = domain + subdomain derivados do touch point principal e consolidados em slug.'
+      detail: t('workbook.mappingStage')
     },
     {
       item: 'mapping_actor',
-      detail: 'actor foi normalizado para system quando a imagem não traz ator operacional confiável.'
+      detail: t('workbook.mappingActor')
     },
     {
       item: 'mapping_service',
-      detail: 'service = domain.subdomain, derivado do touch point e do contexto do evento.'
+      detail: t('workbook.mappingService')
     },
     {
       item: 'mapping_tags',
-      detail: 'tags seguem o padrão touch_point:<slug>,business_domain:<slug>.'
+      detail: t('workbook.mappingTags')
     }
   ];
 

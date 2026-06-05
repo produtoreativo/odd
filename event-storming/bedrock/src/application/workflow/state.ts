@@ -12,6 +12,7 @@ import {
   WorkbookPayload
 } from '../../domain/event-storming-schema.js';
 import { SupportedProvider } from '../../infrastructure/llm/chat-model-factory.js';
+import { SupportedLocale, t } from '../../shared/i18n.js';
 
 export type WorkflowStepName =
   | 'prepare_image_ocr'
@@ -49,6 +50,7 @@ export const GraphState = Annotation.Root({
   outputDir: Annotation<string>(),
   env: Annotation<string>(),
   provider: Annotation<SupportedProvider>(),
+  locale: Annotation<SupportedLocale>({ default: () => 'pt-BR', reducer: (_, right) => right }),
   startFrom: Annotation<'observe' | 'extract' | 'normalize'>(),
   endAt: Annotation<WorkflowEndAt>(),
   observeModel: Annotation<string>(),
@@ -59,10 +61,10 @@ export const GraphState = Annotation.Root({
   extractAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
   normalizeAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
   workbookAttempts: Annotation<number>({ default: () => 0, reducer: (_, right) => right }),
-  observeFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
-  extractFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
-  normalizeFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
-  workbookFeedback: Annotation<string>({ default: () => 'Nenhum.', reducer: (_, right) => right }),
+  observeFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
+  extractFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
+  normalizeFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
+  workbookFeedback: Annotation<string>({ default: () => t('feedback.none'), reducer: (_, right) => right }),
   ocrObservation: Annotation<OcrObservation | null>({ default: () => null, reducer: (_, right) => right }),
   supportingOcrObservation: Annotation<OcrObservation | null>({ default: () => null, reducer: (_, right) => right }),
   ocrEventCandidates: Annotation<OcrEventCandidates | null>({ default: () => null, reducer: (_, right) => right }),

@@ -1,3 +1,5 @@
+import { normalizeLocale, SupportedLocale } from './i18n.js';
+
 export type CliArgs = {
   inputImage: string;
   outputRoot: string;
@@ -7,6 +9,7 @@ export type CliArgs = {
   legacyOutputDir: boolean;
   env: string;
   provider: 'bedrock';
+  locale: SupportedLocale;
   startFrom: 'observe' | 'extract' | 'normalize';
   endAt: WorkflowEndAtArg;
   imageObservation?: string;
@@ -32,6 +35,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     legacyOutputDir: Boolean(optionalStringArg(rawArgs, 'output-dir')),
     env: optionalStringArg(rawArgs, 'env') ?? 'dev',
     provider: requireProviderArg(rawArgs),
+    locale: normalizeLocale(optionalStringArg(rawArgs, 'locale') ?? optionalStringArg(rawArgs, 'language')),
     startFrom: requireStartFromArg(rawArgs),
     endAt: requireEndAtArg(rawArgs),
     imageObservation: optionalStringArg(rawArgs, 'image-observation'),

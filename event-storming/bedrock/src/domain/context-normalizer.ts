@@ -7,6 +7,7 @@ import {
 } from './event-storming-schema.js';
 import { Logger } from '../shared/logger.js';
 import { slugify, unique } from '../shared/text.js';
+import { t } from '../shared/i18n.js';
 
 const logger = new Logger('context-normalizer');
 
@@ -35,7 +36,7 @@ export function candidateContextToRecognizedContext(
   options: NormalizationOptions = {}
 ): RecognizedContext {
   const normalizedCandidateContext = normalizeCandidateContextDomainModels(candidateContext, options);
-  logger.info('Convertendo eventos candidatos em contexto reconhecido', {
+  logger.info(t('log.context.candidateToRecognized'), {
     candidateEventCount: normalizedCandidateContext.candidateEvents.length,
     candidateFlowCount: normalizedCandidateContext.candidateFlows.length
   });
@@ -49,7 +50,7 @@ export function candidateContextToRecognizedContext(
   return canonicalizeContext({
     recognizedFlows: normalizedCandidateContext.candidateFlows.map((flow) => ({
       name: flow.name,
-      description: flow.description.trim() || `Fluxo derivado de ${flow.name}.`,
+      description: flow.description.trim() || t('context.flowDerived', { name: flow.name }),
       stages: flow.stages.length > 0 ? flow.stages : normalizedFlowStages,
       actors: flow.actors.length > 0 ? flow.actors : ['system'],
       services: flow.services.length > 0 ? flow.services : unique(
@@ -92,11 +93,11 @@ export function applyNormalizationReview(
   options: NormalizationOptions = {}
 ): RecognizedContext {
   if (!review) {
-    logger.warn('Nenhuma revisão fornecida; usando contexto determinístico derivado dos candidatos');
+    logger.warn(t('log.context.noReview'));
     return candidateContextToRecognizedContext(candidateContext, options);
   }
 
-  logger.info('Aplicando revisão de normalização', {
+  logger.info(t('log.context.applyReview'), {
     correctionCount: review.corrections.length,
     correctedFlowCount: review.correctedFlows.length
   });
@@ -146,7 +147,7 @@ export function imageObservationToCandidateContext(
   observation: ImageObservation,
   options: NormalizationOptions = {}
 ): CandidateContext {
-  logger.info('Convertendo observação da imagem em candidatos determinísticos', {
+  logger.info(t('log.context.imageToCandidates'), {
     touchPointCount: observation.touchPointsDetected.length,
     correlationCount: observation.touchPointEventCorrelations.length,
     detectedFlowCount: observation.flowsDetected.length
@@ -238,7 +239,7 @@ export function imageObservationToCandidateContext(
         .filter((correlation) => correlation.eventsObservedAroundTouchPoint.length > 0)
         .map((correlation) => ({
           name: correlation.touchPointTitle.trim(),
-          description: correlation.reasoning.trim() || `Fluxo associado a ${correlation.touchPointTitle}.`,
+          description: correlation.reasoning.trim() || t('context.flowAssociated', { name: correlation.touchPointTitle }),
           orderedEventTitles: unique(correlation.eventsObservedAroundTouchPoint.map((item) => item.trim()).filter(Boolean)),
           stages: unique(
             unique(correlation.eventsObservedAroundTouchPoint.map((item) => item.trim()).filter(Boolean))
@@ -262,7 +263,7 @@ export function imageObservationToCandidateContext(
       : [
           {
             name: 'fluxo_reconhecido',
-            description: 'Fluxo derivado deterministicamente da observação da imagem.',
+            description: t('context.flowFromObservation'),
             orderedEventTitles: uniqueEvents.map((event) => event.event_title),
             stages: unique(uniqueEvents.map((event) => event.stage)),
             actors: [inferActor(observation.actorsDetected)],
@@ -403,15 +404,15 @@ function buildCandidateFlowDescription(
   reasoning: string
 ): string {
   const flowTypeDescription = flowType === 'main'
-    ? 'Fluxo principal identificado por setas sólidas.'
+    ? t('context.flowMain')
     : flowType === 'alternate'
-      ? 'Fluxo alternativo identificado por setas tracejadas.'
-      : 'Fluxo identificado visualmente na imagem.';
+      ? t('context.flowAlternate')
+      : t('context.flowVisual');
   const arrowDescription = arrowStyle === 'solid'
-    ? 'Setas sólidas observadas.'
+    ? t('context.arrowSolid')
     : arrowStyle === 'dashed'
-      ? 'Setas tracejadas observadas.'
-      : 'Estilo de seta inconclusivo.';
+      ? t('context.arrowDashed')
+      : t('context.arrowUnknown');
   const normalizedReasoning = reasoning.trim();
 
   return normalizedReasoning === ''
@@ -604,7 +605,7 @@ export function canonicalizeContext(
     : [
         {
           name: 'project_input',
-          description: 'Fluxo consolidado automaticamente a partir dos eventos reconhecidos.',
+          description: t('context.consolidatedFlow'),
           stages,
           services,
           actors,
@@ -631,7 +632,7 @@ function ensureFlowCoverage(
     return [
       {
         name: 'project_input',
-        description: 'Fluxo consolidado automaticamente a partir dos eventos reconhecidos.',
+        description: t('context.consolidatedFlow'),
         stages: coverage.stages,
         services: coverage.services,
         actors: coverage.actors,
