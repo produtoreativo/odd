@@ -29,11 +29,6 @@ export function validateImageObservation(observation: ImageObservation | null): 
       issues.push(`área/contexto classificado também como touch point: ${areaTitle}`);
     }
   }
-  for (const touchPointTitle of observation.touchPointsDetected) {
-    if (observation.textsOutsideShapes.includes(touchPointTitle)) {
-      issues.push(`touch point colide com evento outside (label duplicada): ${touchPointTitle}`);
-    }
-  }
   for (const semantic of observation.eventVisualSemantics) {
     if (semantic.colorHex === '#FF0000' && semantic.role === 'supporting') {
       issues.push(`eventVisualSemantic em vermelho #FF0000 deve ter role=protagonist: ${semantic.eventTitle}`);

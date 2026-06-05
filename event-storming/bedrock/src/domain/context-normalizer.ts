@@ -422,11 +422,13 @@ function buildCandidateFlowDescription(
 function deriveDomainModelStage(eventTitle: string, contextualStage: string): string {
   const eventTokens = tokenize(eventTitle).filter((token) => !EVENT_NON_DOMAIN_TOKENS.has(token));
   const contextualTokens = tokenize(contextualStage).filter((token) => !CONTEXT_NON_DOMAIN_TOKENS.has(token));
-  const explicitStage = inferExplicitDomainStage(eventTokens) || inferExplicitDomainStage(contextualTokens);
-  if (explicitStage) {
-    return explicitStage;
-  }
-  const preferredTokens = eventTokens.length > 0 ? eventTokens : contextualTokens;
+  const eventTokenSet = new Set(eventTokens);
+  const sharedTokens = contextualTokens.filter((token) => eventTokenSet.has(token));
+  const preferredTokens = sharedTokens.length > 0
+    ? sharedTokens
+    : contextualTokens.length > 0
+      ? contextualTokens
+      : eventTokens;
 
   if (preferredTokens.length === 0) {
     return slugify(contextualStage);
@@ -435,16 +437,6 @@ function deriveDomainModelStage(eventTitle: string, contextualStage: string): st
   const canonicalTokens = preferredTokens.map(singularizeToken).filter(Boolean);
   const stage = canonicalTokens.slice(0, 2).join('_');
   return stage === '' ? slugify(contextualStage) : stage;
-}
-
-function inferExplicitDomainStage(tokens: string[]): string | undefined {
-  for (const domainToken of DOMAIN_STAGE_PRIORITY) {
-    if (tokens.includes(domainToken)) {
-      return domainToken;
-    }
-  }
-
-  return undefined;
 }
 
 function singularizeToken(token: string): string {
@@ -499,18 +491,7 @@ const EVENT_NON_DOMAIN_TOKENS = new Set([
   'criados'
 ]);
 
-const DOMAIN_STAGE_PRIORITY = [
-  'cliente',
-  'pagamento',
-  'fatura',
-  'cobranca'
-];
-
 const CONTEXT_NON_DOMAIN_TOKENS = new Set([
-  'via',
-  'checkout',
-  'cadastro',
-  'processamento',
   'de',
   'do',
   'da',
@@ -763,13 +744,8 @@ function deriveSourceSheet(inputImage?: string): string {
 
 function inferBusinessDomain(values: string[], sourceSheet: string): string {
   const tokens = values.flatMap(tokenize);
-  if (tokens.some((token) => ['pagamento', 'cobranca', 'checkout', 'fatura', 'psp', 'payment'].includes(token))) {
-    return 'payments';
-  }
-  if (tokens.some((token) => ['cliente', 'customer', 'cadastro'].includes(token))) {
-    return 'customer';
-  }
-  return sourceSheet.replace(/^odd_/, '') || 'event_storming';
+  const domainToken = mostFrequentInformativeToken(tokens);
+  return domainToken || sourceSheet.replace(/^odd_/, '') || 'event_storming';
 }
 
 function buildEventMetadataByTitle(
@@ -838,9 +814,8 @@ function buildProjectMetadataFromTouchPoint(
 ): Pick<EventMetadata, 'domain' | 'subdomain' | 'stage' | 'service' | 'eventKeyBase'> {
   const touchPointTokens = tokenize(sourceTouchPoint).filter((token) => !TOUCH_POINT_NON_DOMAIN_TOKENS.has(token));
   const eventStage = deriveDomainModelStage(eventTitle, sourceTouchPoint);
-  const domain = inferExplicitDomainStage(touchPointTokens)
-    || inferExplicitDomainStage(tokenize(eventTitle))
-    || touchPointTokens[0]
+  const domain = touchPointTokens[0]
+    || mostFrequentInformativeToken(tokenize(eventTitle))
     || eventStage
     || 'event_storming';
   const subdomain = touchPointTokens.find((token) => token !== domain)
@@ -856,6 +831,22 @@ function buildProjectMetadataFromTouchPoint(
     service,
     eventKeyBase: buildEventKeyBase(businessDomain, service, eventTitle)
   };
+}
+
+function mostFrequentInformativeToken(tokens: string[]): string | undefined {
+  const frequencies = new Map<string, number>();
+  for (const token of tokens.map(singularizeToken)) {
+    if (token.length < 3 || EVENT_NON_DOMAIN_TOKENS.has(token) || CONTEXT_NON_DOMAIN_TOKENS.has(token)) {
+      continue;
+    }
+    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+  }
+
+  return [...frequencies.entries()]
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    })[0]?.[0];
 }
 
 function secondStageToken(stage: string): string | undefined {

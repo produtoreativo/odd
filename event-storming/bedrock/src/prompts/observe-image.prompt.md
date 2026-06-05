@@ -6,28 +6,37 @@ Contexto OCR determinístico já produzido por steps anteriores:
 
 {{ocr_context_json}}
 
+Baseline determinístico já montado no formato `ImageObservation`:
+
+{{deterministic_observation_json}}
+
 O que o OCR clássico já resolveu:
 - transcrição literal de labels técnicas vermelhas confiáveis em `protagonistEventTitles`
-- classificação dessas labels como `role: "protagonist"` e `colorHex: "#FF0000"`
-- criação de `textObservations` para labels vermelhas
-- criação de `eventVisualSemantics` para labels vermelhas confiáveis
-- identificação de labels vermelhas incertas em `uncertainItems`
+- transcrição literal de labels técnicas azuis confiáveis em `supportingEventTitles`
+- classificação dessas labels como protagonistas/coadjuvantes por cor em `eventVisualSemantics`
+- criação de `textObservations` para labels vermelhas e azuis
+- identificação de labels incertas em `uncertainItems`
+- detecção geométrica de candidatos a touch point em `touchPointCandidates`
+- detecção geométrica de candidatos a área/swimlane/domínio em `areaCandidates`
+- detecção geométrica de setas em `arrowDetections`
+- extração OCR de legendas de fluxo em `flowLegends`
+- composição espacial preliminar em `spatialComposition`
 
 Não refaça essas tarefas. Preserve exatamente as strings vindas do OCR confiável.
 
 Sua tarefa agora:
-- validar visualmente apenas os itens OCR incertos usando a imagem original e crops de revisão, quando enviados
-- detectar labels azuis coadjuvantes que o OCR vermelho não cobre
-- detectar áreas grandes, domínios, sistemas, swimlanes, agrupadores, contêineres ou raias
-- detectar caixas operacionais internas que participam do fluxo como touch points
-- detectar setas, estilo de seta, caminhos principais/alternativos e ordem narrativa
-- associar eventos aos touch points usando legenda, setas, proximidade e sequência visual
+- validar visualmente itens incertos ou ausentes dos detectores clássicos usando a imagem original e crops de revisão, quando enviados
+- complementar labels, áreas, caixas, setas, fluxos ou correlações apenas quando a imagem mostrar algo que os steps determinísticos não capturaram
+- corrigir a composição espacial quando a geometria clássica conflitar claramente com a imagem
 - produzir o contrato completo `ImageObservation` para os steps seguintes
+- usar `deterministic_observation_json` como ponto de partida do contrato final, removendo ou alterando campos apenas quando a imagem original contradisser claramente o baseline
 
 Regras de preservação OCR:
 - todo item em `ocr_context_json.protagonistEventTitles` deve aparecer em `textsOutsideShapes`
+- todo item em `ocr_context_json.supportingEventTitles` deve aparecer em `textsOutsideShapes`
 - todo item em `ocr_context_json.textObservations` deve aparecer em `textObservations`, salvo se a imagem provar contradição clara; nesse caso registre em `assumptions`
 - todo item em `ocr_context_json.eventVisualSemantics` deve aparecer em `eventVisualSemantics`
+- use `ocr_context_json.spatialComposition` como baseline para `touchPointsDetected`, `areasDetected`, `flowsDetected` e `touchPointEventCorrelations`
 - itens em `ocr_context_json.uncertainItems` só podem entrar em `textsOutsideShapes` quando forem confirmados visualmente; caso contrário mantenha em `uncertainItems`
 - não traduza, corrija, expanda ou normalize identificadores técnicos
 - qualquer `eventTitle` em `eventVisualSemantics`, `touchPointEventCorrelations` e `flowsDetected.orderedEventTitles` deve ser cópia exata de um item em `textsOutsideShapes`
@@ -44,6 +53,8 @@ Semântica visual:
 - ponto de contato é somente caixa operacional interna atravessada pelo fluxo
 - texto dentro de caixa operacional interna é touch point, não evento
 - texto fora de formas estruturais é candidato a evento
+- texto dentro de qualquer caixa, retângulo, área, swimlane ou domínio nunca deve entrar em `textsOutsideShapes`, mesmo se parecer vermelho ou azul
+- se uma label estiver dentro de uma caixa operacional, classifique como `touch_point` ou `structural`; se estiver dentro de área/domínio, classifique como `area` ou `structural`
 - uma mesma string não pode aparecer ao mesmo tempo em `touchPointsDetected` e `textsOutsideShapes`
 - caixa sem evento próximo, seta, entrada, saída ou papel claro no fluxo não deve entrar em `touchPointsDetected`
 

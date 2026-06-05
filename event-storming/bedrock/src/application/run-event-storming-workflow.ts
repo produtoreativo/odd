@@ -26,6 +26,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     env: args.env,
     provider: args.provider,
     startFrom: args.startFrom,
+    endAt: args.endAt,
     observeModel: agentModels.observeModel,
     extractModel: agentModels.extractModel,
     normalizeModel: agentModels.normalizeModel,
@@ -42,14 +43,21 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
         env: args.env,
         provider: args.provider,
         startFrom: args.startFrom,
+        endAt: args.endAt,
         observeModel: agentModels.observeModel,
         extractModel: agentModels.extractModel,
         normalizeModel: agentModels.normalizeModel,
         maxAttempts: args.maxAttempts,
         ocrObservation: null,
+        supportingOcrObservation: null,
         ocrEventCandidates: null,
+        shapeGeometry: null,
+        arrowDetections: null,
+        flowLegendDetections: null,
+        spatialObservation: null,
         ocrTextObservations: [],
         observePromptContext: null,
+        deterministicImageObservation: null,
         imageObservation: preloadedState.imageObservation,
         candidateContext: preloadedState.candidateContext
       },
@@ -65,6 +73,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
           env: args.env,
           provider: args.provider,
           startFrom: args.startFrom,
+          endAt: args.endAt,
           observeModel: agentModels.observeModel,
           extractModel: agentModels.extractModel,
           normalizeModel: agentModels.normalizeModel,
@@ -92,10 +101,18 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   logger.info('Resumo final do workflow', workflowSummary);
 
   const requiredStates = {
-    imageObservation: args.startFrom === 'observe' ? Boolean(result.imageObservation) : true,
-    candidateContext: args.startFrom === 'normalize' ? true : Boolean(result.candidateContext),
-    standardizedContext: Boolean(result.standardizedContext),
-    workbook: Boolean(result.workbook)
+    imageObservation: shouldRequireState(args.endAt, 'observe_image') && args.startFrom === 'observe'
+      ? Boolean(result.imageObservation)
+      : true,
+    candidateContext: shouldRequireState(args.endAt, 'extract_events') && args.startFrom !== 'normalize'
+      ? Boolean(result.candidateContext)
+      : true,
+    standardizedContext: shouldRequireState(args.endAt, 'normalize_context')
+      ? Boolean(result.standardizedContext)
+      : true,
+    workbook: shouldRequireState(args.endAt, 'create_workbook')
+      ? Boolean(result.workbook)
+      : true
   };
 
   if (!requiredStates.imageObservation || !requiredStates.candidateContext || !requiredStates.standardizedContext || !requiredStates.workbook) {
@@ -109,9 +126,15 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   const observationPath = path.join(args.outputDir, 'image-observation.json');
   const metadataPath = path.join(args.outputDir, 'event-storming-metadata.json');
   const ocrObservationPath = path.join(args.outputDir, 'ocr-observation.json');
+  const supportingOcrObservationPath = path.join(args.outputDir, 'ocr-supporting-observation.json');
   const ocrEventCandidatesPath = path.join(args.outputDir, 'ocr-event-candidates.json');
+  const shapeGeometryPath = path.join(args.outputDir, 'shape-geometry.json');
+  const arrowDetectionsPath = path.join(args.outputDir, 'arrow-detections.json');
+  const flowLegendsPath = path.join(args.outputDir, 'flow-legends.json');
+  const spatialObservationPath = path.join(args.outputDir, 'spatial-observation.json');
   const ocrTextObservationsPath = path.join(args.outputDir, 'ocr-text-observations.json');
   const observePromptContextPath = path.join(args.outputDir, 'observe-prompt-context.json');
+  const deterministicImageObservationPath = path.join(args.outputDir, 'deterministic-image-observation.json');
   const candidatePath = path.join(args.outputDir, 'candidate-events.json');
   const recognizedPath = path.join(args.outputDir, 'recognized-context.json');
   const standardizedPath = path.join(args.outputDir, 'standardized-context.json');
@@ -127,6 +150,7 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     provider: args.provider,
     env: args.env,
     startFrom: args.startFrom,
+    endAt: args.endAt,
     observeModel: agentModels.observeModel,
     extractModel: agentModels.extractModel,
     normalizeModel: agentModels.normalizeModel,
@@ -136,14 +160,32 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
   if (result.ocrObservation) {
     await writeJsonFile(ocrObservationPath, result.ocrObservation);
   }
+  if (result.supportingOcrObservation) {
+    await writeJsonFile(supportingOcrObservationPath, result.supportingOcrObservation);
+  }
   if (result.ocrEventCandidates) {
     await writeJsonFile(ocrEventCandidatesPath, result.ocrEventCandidates);
+  }
+  if (result.shapeGeometry) {
+    await writeJsonFile(shapeGeometryPath, result.shapeGeometry);
+  }
+  if (result.arrowDetections) {
+    await writeJsonFile(arrowDetectionsPath, result.arrowDetections);
+  }
+  if (result.flowLegendDetections) {
+    await writeJsonFile(flowLegendsPath, result.flowLegendDetections);
+  }
+  if (result.spatialObservation) {
+    await writeJsonFile(spatialObservationPath, result.spatialObservation);
   }
   if (result.ocrTextObservations.length > 0) {
     await writeJsonFile(ocrTextObservationsPath, result.ocrTextObservations);
   }
   if (result.observePromptContext) {
     await writeJsonFile(observePromptContextPath, result.observePromptContext);
+  }
+  if (result.deterministicImageObservation) {
+    await writeJsonFile(deterministicImageObservationPath, result.deterministicImageObservation);
   }
   if (result.imageObservation) {
     await writeJsonFile(observationPath, result.imageObservation);
@@ -164,9 +206,15 @@ export async function runEventStormingWorkflow(args: CliArgs): Promise<void> {
     metadataPath,
     observationPath,
     ocrObservationPath,
+    supportingOcrObservationPath,
     ocrEventCandidatesPath,
+    shapeGeometryPath,
+    arrowDetectionsPath,
+    flowLegendsPath,
+    spatialObservationPath,
     ocrTextObservationsPath,
     observePromptContextPath,
+    deterministicImageObservationPath,
     candidatePath,
     recognizedPath,
     standardizedPath,
@@ -207,26 +255,43 @@ async function loadPreloadedState(args: CliArgs): Promise<{
   return { imageObservation, candidateContext };
 }
 
+function shouldRequireState(endAt: WorkflowStepName, requiredAfter: WorkflowStepName): boolean {
+  return workflowStepIndex(endAt) >= workflowStepIndex(requiredAfter);
+}
+
+function workflowStepIndex(stepName: WorkflowStepName): number {
+  const index = ORDERED_WORKFLOW_STEPS.indexOf(stepName);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+}
+
+const ORDERED_WORKFLOW_STEPS: WorkflowStepName[] = [
+  'prepare_image_ocr',
+  'prepare_supporting_ocr',
+  'classify_ocr_event_candidates',
+  'detect_shape_geometry',
+  'detect_arrow_geometry',
+  'extract_flow_legends',
+  'compose_spatial_observation',
+  'compose_ocr_text_observations',
+  'compose_observe_prompt_context',
+  'compose_deterministic_image_observation',
+  'observe_image',
+  'validate_image_observation',
+  'extract_events',
+  'validate_candidate_events',
+  'normalize_context',
+  'validate_normalization',
+  'create_workbook',
+  'validate_workbook',
+  'fail'
+];
+
 function buildWorkflowSummary(
   stepMetrics: Partial<Record<WorkflowStepName, WorkflowStepMetrics>> | undefined,
   workflowStartedAt: number
 ) {
   const totalDurationMs = Date.now() - workflowStartedAt;
-  const orderedSteps: WorkflowStepName[] = [
-    'prepare_image_ocr',
-    'classify_ocr_event_candidates',
-    'compose_ocr_text_observations',
-    'compose_observe_prompt_context',
-    'observe_image',
-    'validate_image_observation',
-    'extract_events',
-    'validate_candidate_events',
-    'normalize_context',
-    'validate_normalization',
-    'create_workbook',
-    'validate_workbook',
-    'fail'
-  ];
+  const orderedSteps = ORDERED_WORKFLOW_STEPS;
 
   const steps = orderedSteps
     .map((stepName) => {

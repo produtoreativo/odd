@@ -8,6 +8,7 @@ export type CliArgs = {
   env: string;
   provider: 'bedrock';
   startFrom: 'observe' | 'extract' | 'normalize';
+  endAt: WorkflowEndAtArg;
   imageObservation?: string;
   candidateContext?: string;
   defaultModel?: string;
@@ -32,6 +33,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     env: optionalStringArg(rawArgs, 'env') ?? 'dev',
     provider: requireProviderArg(rawArgs),
     startFrom: requireStartFromArg(rawArgs),
+    endAt: requireEndAtArg(rawArgs),
     imageObservation: optionalStringArg(rawArgs, 'image-observation'),
     candidateContext: optionalStringArg(rawArgs, 'candidate-context'),
     defaultModel: optionalStringArg(rawArgs, 'model'),
@@ -41,6 +43,26 @@ export function parseCliArgs(argv: string[]): CliArgs {
     maxAttempts: toPositiveInteger(rawArgs['max-attempts'] ?? '2')
   };
 }
+
+export type WorkflowEndAtArg =
+  | 'prepare_image_ocr'
+  | 'prepare_supporting_ocr'
+  | 'classify_ocr_event_candidates'
+  | 'detect_shape_geometry'
+  | 'detect_arrow_geometry'
+  | 'extract_flow_legends'
+  | 'compose_spatial_observation'
+  | 'compose_ocr_text_observations'
+  | 'compose_observe_prompt_context'
+  | 'compose_deterministic_image_observation'
+  | 'observe_image'
+  | 'validate_image_observation'
+  | 'extract_events'
+  | 'validate_candidate_events'
+  | 'normalize_context'
+  | 'validate_normalization'
+  | 'create_workbook'
+  | 'validate_workbook';
 
 function parseArgs(argv: string[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -95,6 +117,35 @@ function requireStartFromArg(args: Record<string, string>): 'observe' | 'extract
   }
   return startFrom;
 }
+
+function requireEndAtArg(args: Record<string, string>): WorkflowEndAtArg {
+  const endAt = (args['end-at'] ?? 'validate_workbook').trim();
+  if (!VALID_END_AT_STEPS.has(endAt)) {
+    throw new Error(`end-at inválido: ${endAt}`);
+  }
+  return endAt as WorkflowEndAtArg;
+}
+
+const VALID_END_AT_STEPS: ReadonlySet<string> = new Set([
+  'prepare_image_ocr',
+  'prepare_supporting_ocr',
+  'classify_ocr_event_candidates',
+  'detect_shape_geometry',
+  'detect_arrow_geometry',
+  'extract_flow_legends',
+  'compose_spatial_observation',
+  'compose_ocr_text_observations',
+  'compose_observe_prompt_context',
+  'compose_deterministic_image_observation',
+  'observe_image',
+  'validate_image_observation',
+  'extract_events',
+  'validate_candidate_events',
+  'normalize_context',
+  'validate_normalization',
+  'create_workbook',
+  'validate_workbook'
+]);
 
 function toPositiveInteger(value: string): number {
   const parsed = Number(value);

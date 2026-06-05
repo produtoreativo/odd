@@ -57,7 +57,7 @@ Instruções:
       "stage": "string",
       "actor": "string",
       "service": "string",
-      "tags": "touch_point:checkout,business_domain:payments"
+      "tags": "touch_point:<slug>,business_domain:<slug>"
     }
   ],
   "assumptions": ["string"]

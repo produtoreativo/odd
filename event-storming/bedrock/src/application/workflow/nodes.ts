@@ -1,8 +1,12 @@
 import path from 'node:path';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import {
+  ArrowDetections,
+  ArrowDetectionsSchema,
   CandidateContextSchema,
   CandidateContext,
+  FlowLegendDetections,
+  FlowLegendDetectionsSchema,
   ImageObservation,
   ImageObservationSchema,
   NormalizationReviewSchema,
@@ -14,6 +18,8 @@ import {
   OcrObservationSchema,
   PROJECT_FORMAT_COLUMNS,
   REQUIRED_COLUMNS,
+  ShapeGeometry,
+  ShapeGeometrySchema,
   WorkbookSchema
 } from '../../domain/event-storming-schema.js';
 import { Logger } from '../../shared/logger.js';
@@ -39,7 +45,13 @@ import {
 import { WorkflowGraphState, WorkflowStepMetrics, WorkflowStepName } from './state.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { writeJsonFile, writeTextFile } from '../../infrastructure/filesystem/file-system.js';
-import { recognizeTechnicalLabels } from '../../infrastructure/ocr/technical-label-ocr.js';
+import {
+  detectArrowGeometry,
+  detectShapeGeometry,
+  recognizeFlowLegends,
+  recognizeSupportingLabels,
+  recognizeTechnicalLabels
+} from '../../infrastructure/ocr/technical-label-ocr.js';
 
 const logger = new Logger('workflow-nodes');
 
@@ -97,6 +109,59 @@ export async function prepareImageOcrNode(state: WorkflowGraphState) {
   return execute();
 }
 
+export async function prepareSupportingOcrNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó prepare_supporting_ocr', {
+    inputImage: state.inputImage
+  });
+
+  const execute = traceStep(
+    async () => {
+      try {
+        const supportingOcrObservation = OcrObservationSchema.parse(await recognizeSupportingLabels(state.inputImage, {
+          outputDir: state.outputDir
+        }));
+        await persistStageJson(state.outputDir, '00-ocr-supporting-observation.json', supportingOcrObservation);
+
+        logger.info('Nó prepare_supporting_ocr concluído com sucesso', {
+          textCount: supportingOcrObservation.texts.length
+        });
+
+        return {
+          supportingOcrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_supporting_ocr', startedAt)
+        };
+      } catch (error) {
+        const message = formatError(error);
+        logger.warn('Falha no OCR azul; workflow continuará sem labels coadjuvantes determinísticas', {
+          error: message
+        });
+        const supportingOcrObservation = OcrObservationSchema.parse({
+          inputImage: state.inputImage,
+          texts: [],
+          assumptions: [`OCR azul não executado com sucesso: ${message}`]
+        });
+        await persistStageJson(state.outputDir, '00-ocr-supporting-observation.json', supportingOcrObservation);
+
+        return {
+          supportingOcrObservation,
+          stepMetrics: buildStepMetricUpdate('prepare_supporting_ocr', startedAt)
+        };
+      }
+    },
+    {
+      name: 'prepare_supporting_ocr_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
 export async function classifyOcrEventCandidatesNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
   logger.info('Iniciando nó classify_ocr_event_candidates', {
@@ -106,7 +171,7 @@ export async function classifyOcrEventCandidatesNode(state: WorkflowGraphState) 
   const execute = traceStep(
     async () => {
       const ocrEventCandidates = OcrEventCandidatesSchema.parse(
-        buildOcrEventCandidates(state.ocrObservation)
+        buildOcrEventCandidates(state.ocrObservation, state.supportingOcrObservation)
       );
       await persistStageJson(state.outputDir, '00-ocr-event-candidates.json', ocrEventCandidates);
 
@@ -127,6 +192,139 @@ export async function classifyOcrEventCandidatesNode(state: WorkflowGraphState) 
       metadata: {
         inputImage: state.inputImage
       }
+    }
+  );
+
+  return execute();
+}
+
+export async function detectShapeGeometryNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó detect_shape_geometry', { inputImage: state.inputImage });
+
+  const execute = traceStep(
+    async () => {
+      const shapeGeometry = ShapeGeometrySchema.parse(await detectShapeGeometry(state.inputImage));
+      await persistStageJson(state.outputDir, '00-shape-geometry.json', shapeGeometry);
+
+      logger.info('Nó detect_shape_geometry concluído com sucesso', {
+        touchPointCandidates: shapeGeometry.touchPointCandidates.length,
+        areaCandidates: shapeGeometry.areaCandidates.length
+      });
+
+      return {
+        shapeGeometry,
+        stepMetrics: buildStepMetricUpdate('detect_shape_geometry', startedAt)
+      };
+    },
+    {
+      name: 'detect_shape_geometry_node',
+      runType: 'chain',
+      tags: ['node', 'geometry', 'deterministic'],
+      metadata: { inputImage: state.inputImage }
+    }
+  );
+
+  return execute();
+}
+
+export async function detectArrowGeometryNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó detect_arrow_geometry', { inputImage: state.inputImage });
+
+  const execute = traceStep(
+    async () => {
+      const arrowDetections = ArrowDetectionsSchema.parse(await detectArrowGeometry(state.inputImage));
+      await persistStageJson(state.outputDir, '00-arrow-detections.json', arrowDetections);
+
+      logger.info('Nó detect_arrow_geometry concluído com sucesso', {
+        arrowCount: arrowDetections.arrows.length
+      });
+
+      return {
+        arrowDetections,
+        stepMetrics: buildStepMetricUpdate('detect_arrow_geometry', startedAt)
+      };
+    },
+    {
+      name: 'detect_arrow_geometry_node',
+      runType: 'chain',
+      tags: ['node', 'geometry', 'deterministic'],
+      metadata: { inputImage: state.inputImage }
+    }
+  );
+
+  return execute();
+}
+
+export async function extractFlowLegendsNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó extract_flow_legends', { inputImage: state.inputImage });
+
+  const execute = traceStep(
+    async () => {
+      const flowLegendDetections = FlowLegendDetectionsSchema.parse(await recognizeFlowLegends(state.inputImage, {
+        outputDir: state.outputDir
+      }));
+      await persistStageJson(state.outputDir, '00-flow-legends.json', flowLegendDetections);
+
+      logger.info('Nó extract_flow_legends concluído com sucesso', {
+        legendCount: flowLegendDetections.legends.length,
+        ocrTextCount: flowLegendDetections.ocrTexts.length
+      });
+
+      return {
+        flowLegendDetections,
+        stepMetrics: buildStepMetricUpdate('extract_flow_legends', startedAt)
+      };
+    },
+    {
+      name: 'extract_flow_legends_node',
+      runType: 'chain',
+      tags: ['node', 'ocr', 'legend', 'deterministic'],
+      metadata: { inputImage: state.inputImage }
+    }
+  );
+
+  return execute();
+}
+
+export async function composeSpatialObservationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó compose_spatial_observation', {
+    eventCount: (state.ocrEventCandidates?.trusted.length ?? 0) + (state.ocrEventCandidates?.uncertain.length ?? 0),
+    touchPointCandidates: state.shapeGeometry?.touchPointCandidates.length ?? 0,
+    areaCandidates: state.shapeGeometry?.areaCandidates.length ?? 0,
+    arrows: state.arrowDetections?.arrows.length ?? 0,
+    legends: state.flowLegendDetections?.legends.length ?? 0
+  });
+
+  const execute = traceStep(
+    async () => {
+      const spatialObservation = buildSpatialObservation(
+        state.ocrEventCandidates,
+        state.shapeGeometry,
+        state.arrowDetections,
+        state.flowLegendDetections
+      );
+      await persistStageJson(state.outputDir, '00-spatial-observation.json', spatialObservation);
+
+      logger.info('Nó compose_spatial_observation concluído com sucesso', {
+        touchPointCount: spatialObservation.touchPointsDetected.length,
+        areaCount: spatialObservation.areasDetected.length,
+        flowCount: spatialObservation.flowsDetected.length
+      });
+
+      return {
+        spatialObservation,
+        stepMetrics: buildStepMetricUpdate('compose_spatial_observation', startedAt)
+      };
+    },
+    {
+      name: 'compose_spatial_observation_node',
+      runType: 'chain',
+      tags: ['node', 'spatial', 'deterministic'],
+      metadata: { inputImage: state.inputImage }
     }
   );
 
@@ -177,7 +375,16 @@ export async function composeObservePromptContextNode(state: WorkflowGraphState)
   const execute = traceStep(
     async () => {
       const observePromptContext = OcrPromptContextSchema.parse(
-        buildObservePromptContext(state.ocrEventCandidates, state.ocrTextObservations, state.ocrObservation)
+        buildObservePromptContext(
+          state.ocrEventCandidates,
+          state.ocrTextObservations,
+          state.ocrObservation,
+          state.supportingOcrObservation,
+          state.shapeGeometry,
+          state.arrowDetections,
+          state.flowLegendDetections,
+          state.spatialObservation
+        )
       );
       await persistStageJson(state.outputDir, '00-observe-prompt-context.json', observePromptContext);
 
@@ -204,6 +411,45 @@ export async function composeObservePromptContextNode(state: WorkflowGraphState)
   return execute();
 }
 
+export async function composeDeterministicImageObservationNode(state: WorkflowGraphState) {
+  const startedAt = Date.now();
+  logger.info('Iniciando nó compose_deterministic_image_observation', {
+    hasObservePromptContext: Boolean(state.observePromptContext)
+  });
+
+  const execute = traceStep(
+    async () => {
+      const deterministicImageObservation = ImageObservationSchema.parse(
+        sanitizeImageObservation(buildDeterministicImageObservation(state.observePromptContext), state.observePromptContext)
+      );
+      await persistStageJson(state.outputDir, '00-deterministic-image-observation.json', deterministicImageObservation);
+
+      logger.info('Nó compose_deterministic_image_observation concluído com sucesso', {
+        touchPointCount: deterministicImageObservation.touchPointsDetected.length,
+        areaCount: deterministicImageObservation.areasDetected.length,
+        outsideTextCount: deterministicImageObservation.textsOutsideShapes.length,
+        flowCount: deterministicImageObservation.flowsDetected.length
+      });
+
+      return {
+        deterministicImageObservation,
+        imageObservation: deterministicImageObservation,
+        stepMetrics: buildStepMetricUpdate('compose_deterministic_image_observation', startedAt)
+      };
+    },
+    {
+      name: 'compose_deterministic_image_observation_node',
+      runType: 'chain',
+      tags: ['node', 'observe', 'deterministic'],
+      metadata: {
+        inputImage: state.inputImage
+      }
+    }
+  );
+
+  return execute();
+}
+
 export async function observeImageNode(state: WorkflowGraphState) {
   const startedAt = Date.now();
   const attempt = state.observeAttempts + 1;
@@ -216,7 +462,8 @@ export async function observeImageNode(state: WorkflowGraphState) {
 
   const prompt = await renderPrompt('observe-image.prompt.md', {
     feedback,
-    ocr_context_json: JSON.stringify(state.observePromptContext, null, 2)
+    ocr_context_json: JSON.stringify(state.observePromptContext, null, 2),
+    deterministic_observation_json: JSON.stringify(state.deterministicImageObservation, null, 2)
   });
 
   const execute = traceStep(
@@ -737,17 +984,25 @@ async function persistRawResponse(outputDir: string, stagePrefix: string, attemp
   await writeTextFile(filePath, `${extractRawResponseText(payload)}\n`);
 }
 
-function buildOcrEventCandidates(ocrObservation: OcrObservation | null): OcrEventCandidates {
-  if (!ocrObservation) {
-    return { trusted: [], uncertain: [], assumptions: ['OCR técnico não estava disponível para classificar eventos protagonistas.'] };
+function buildOcrEventCandidates(
+  ocrObservation: OcrObservation | null,
+  supportingOcrObservation: OcrObservation | null
+): OcrEventCandidates {
+  const redTexts = ocrObservation?.texts ?? [];
+  const blueTexts = supportingOcrObservation?.texts ?? [];
+  if (redTexts.length === 0 && blueTexts.length === 0) {
+    return { trusted: [], uncertain: [], assumptions: ['OCR técnico não estava disponível para classificar eventos por cor.'] };
   }
 
-  const candidates = ocrObservation.texts.map((text) => {
+  const candidates = [
+    ...redTexts.map((text) => ({ text, role: 'protagonist' as const, colorHex: '#FF0000' as const })),
+    ...blueTexts.map((text) => ({ text, role: 'supporting' as const, colorHex: '#305CDE' as const }))
+  ].map(({ text, role, colorHex }) => {
     const confidence = Number((text.confidence / 100).toFixed(3));
     return {
       eventTitle: text.text,
-      role: 'protagonist' as const,
-      colorHex: '#FF0000' as const,
+      role,
+      colorHex,
       confidence,
       source: text.source,
       bbox: text.bbox,
@@ -755,22 +1010,52 @@ function buildOcrEventCandidates(ocrObservation: OcrObservation | null): OcrEven
       ambiguousCharacters: text.ambiguousCharacters,
       needsOcrReview: text.needsOcrReview,
       reasoning: text.needsOcrReview
-        ? 'OCR clássico detectou texto vermelho técnico, mas a baixa confiança ou caracteres ambíguos exigem revisão visual.'
-        : 'OCR clássico detectou texto vermelho técnico com confiança suficiente; pela regra de cor, é candidato protagonista.'
+        ? `OCR clássico detectou texto ${role === 'protagonist' ? 'vermelho' : 'azul'} técnico, mas a baixa confiança ou caracteres ambíguos exigem revisão visual.`
+        : `OCR clássico detectou texto ${role === 'protagonist' ? 'vermelho' : 'azul'} técnico com confiança suficiente; pela regra de cor, é candidato ${role}.`
     };
   });
+  const compactedCandidates = removeFragmentEventCandidates(candidates);
 
-  const trusted = candidates.filter((candidate) => !candidate.needsOcrReview);
-  const uncertain = candidates.filter((candidate) => candidate.needsOcrReview);
+  const trusted = compactedCandidates.filter((candidate) => !candidate.needsOcrReview);
+  const uncertain = compactedCandidates.filter((candidate) => candidate.needsOcrReview);
 
   return {
     trusted,
     uncertain,
     assumptions: [
-      ...ocrObservation.assumptions,
-      'Eventos detectados por OCR nesta etapa cobrem apenas labels técnicas vermelhas; labels azuis, formas, setas e fluxo permanecem responsabilidade da observação multimodal.'
+      ...(ocrObservation?.assumptions ?? []),
+      ...(supportingOcrObservation?.assumptions ?? []),
+      ...(compactedCandidates.length < candidates.length
+        ? [`${candidates.length - compactedCandidates.length} fragmento(s) de OCR foram removidos por estarem contidos em labels mais completas da mesma cor.`]
+        : []),
+      'Eventos detectados por OCR nesta etapa cobrem labels técnicas vermelhas e azuis; formas, setas e fluxo são tratados por steps geométricos posteriores.'
     ]
   };
+}
+
+function removeFragmentEventCandidates(
+  candidates: Array<OcrEventCandidates['trusted'][number]>
+): Array<OcrEventCandidates['trusted'][number]> {
+  return candidates.filter((candidate, index) => {
+    const candidateTokens = equivalenceTokens(candidate.eventTitle);
+    if (candidateTokens.length === 0) {
+      return false;
+    }
+
+    return !candidates.some((other, otherIndex) => {
+      if (index === otherIndex || candidate.role !== other.role || candidate.colorHex !== other.colorHex) {
+        return false;
+      }
+      const otherTokens = equivalenceTokens(other.eventTitle);
+      if (otherTokens.length <= candidateTokens.length) {
+        return false;
+      }
+      if (!tokensContainSequence(otherTokens, candidateTokens)) {
+        return false;
+      }
+      return candidateTokens.length <= 2 || candidateTokens.length / otherTokens.length <= 0.75;
+    });
+  });
 }
 
 function buildOcrTextObservations(ocrEventCandidates: OcrEventCandidates | null): ImageObservation['textObservations'] {
@@ -781,8 +1066,8 @@ function buildOcrTextObservations(ocrEventCandidates: OcrEventCandidates | null)
   return [...ocrEventCandidates.trusted, ...ocrEventCandidates.uncertain].map((candidate) => ({
     text: candidate.eventTitle,
     kind: candidate.needsOcrReview ? 'uncertain' as const : 'event_candidate' as const,
-    role: 'protagonist' as const,
-    colorHex: '#FF0000' as const,
+    role: candidate.role,
+    colorHex: candidate.colorHex,
     confidence: candidate.confidence,
     locationHint: locationHintFromBbox(candidate.bbox),
     ocrAlternatives: candidate.ocrAlternatives,
@@ -792,35 +1077,647 @@ function buildOcrTextObservations(ocrEventCandidates: OcrEventCandidates | null)
   }));
 }
 
+function buildSpatialObservation(
+  ocrEventCandidates: OcrEventCandidates | null,
+  shapeGeometry: ShapeGeometry | null,
+  arrowDetections: ArrowDetections | null,
+  flowLegendDetections: FlowLegendDetections | null
+): NonNullable<OcrPromptContext['spatialComposition']> {
+  const events = [...(ocrEventCandidates?.trusted ?? []), ...(ocrEventCandidates?.uncertain ?? [])]
+    .filter((event) => !event.needsOcrReview && event.bbox);
+  const eventTitles = events.map((event) => event.eventTitle);
+  const areaCandidates = labelGeometryCandidates(shapeGeometry?.areaCandidates ?? [], flowLegendDetections, 'area')
+    .filter((candidate) => candidate.label)
+    .filter((candidate) => !isTechnicalEventLabel(candidate.label as string))
+    .filter((candidate) => !hasEquivalent(candidate.label as string, eventTitles));
+  const areaLabels = new Set(areaCandidates.map((candidate, index) => candidate.label ?? `Área ${index + 1}`));
+  const shapeTouchPointCandidates = mergeAdjacentTouchPointLabelFragments(
+    labelGeometryCandidates(shapeGeometry?.touchPointCandidates ?? [], flowLegendDetections, 'touch_point')
+      .map((candidate) => normalizeTouchPointCandidateLabel(candidate))
+  )
+    .filter((candidate) => candidate.confidence >= 0.6)
+    .filter((candidate) => candidate.label && isReliableTouchPointLabel(candidate.label))
+    .filter((candidate) => !isTechnicalEventLabel(candidate.label as string))
+    .filter((candidate) => !hasEquivalent(candidate.label as string, eventTitles))
+    .filter((candidate) => !isLabelFragmentOfAny(candidate.label as string, eventTitles))
+    .filter((candidate, index) => !areaLabels.has(candidate.label ?? `Touch Point ${index + 1}`));
+  const ocrTouchPointCandidates = buildOcrTouchPointCandidates(
+    flowLegendDetections,
+    events,
+    areaCandidates.map((candidate, index) => candidate.label ?? `Área ${index + 1}`)
+  );
+  const touchPointCandidates = mergeTouchPointCandidates([...shapeTouchPointCandidates, ...ocrTouchPointCandidates]);
+  const touchPointsDetected = touchPointCandidates.map((candidate, index) => candidate.label ?? `Touch Point ${index + 1}`);
+  const areasDetected = areaCandidates.map((candidate, index) => candidate.label ?? `Área ${index + 1}`);
+  const textsOutsideShapes = events.map((event) => event.eventTitle);
+  const touchPointEventCorrelations = buildSpatialCorrelations(events, touchPointCandidates);
+  const flowsDetected = buildSpatialFlows(events, touchPointsDetected, arrowDetections, flowLegendDetections);
+
+  return {
+    touchPointsDetected,
+    areasDetected,
+    textsOutsideShapes,
+    touchPointEventCorrelations,
+    flowsDetected,
+    assumptions: [
+      'Composição espacial determinística usa proximidade entre bbox de evento e bbox de forma; relações podem precisar de revisão quando há sobreposição visual.',
+      ...touchPointCandidates
+        .filter((candidate) => !candidate.label)
+        .map((candidate) => `${candidate.id} não recebeu label textual confiável por OCR e foi nomeado por índice.`),
+      ...areaCandidates
+        .filter((candidate) => !candidate.label)
+        .map((candidate) => `${candidate.id} não recebeu label textual confiável por OCR e foi nomeado por índice.`)
+    ]
+  };
+}
+
+function buildOcrTouchPointCandidates(
+  flowLegendDetections: FlowLegendDetections | null,
+  events: Array<OcrEventCandidates['trusted'][number]>,
+  areaTitles: string[]
+): Array<{ id: string; label?: string; bbox: { x: number; y: number; width: number; height: number }; confidence: number; reasoning: string }> {
+  const eventTitles = events.map((event) => event.eventTitle);
+  const eventBboxes = events
+    .map((event) => event.bbox)
+    .filter((bbox): bbox is NonNullable<OcrEventCandidates['trusted'][number]['bbox']> => Boolean(bbox));
+
+  return (flowLegendDetections?.ocrTexts ?? [])
+    .filter((text) => text.bbox && !text.needsOcrReview && text.confidence >= 70)
+    .filter((text) => hasNearbyEventBbox(text.bbox as NonNullable<typeof text.bbox>, eventBboxes))
+    .map((text, index) => ({
+      id: `ocr_touch_point_${index + 1}`,
+      label: normalizeTouchPointLabel(text.text),
+      bbox: text.bbox as NonNullable<typeof text.bbox>,
+      confidence: Number((text.confidence / 100).toFixed(3)),
+      reasoning: 'Touch point candidato criado por OCR textual confiável quando a geometria da caixa é ambígua.'
+    }))
+    .filter((candidate) => candidate.label && isReliableTouchPointLabel(candidate.label))
+    .filter((candidate) => !hasEquivalent(candidate.label as string, eventTitles))
+    .filter((candidate) => !isLabelFragmentOfAny(candidate.label as string, eventTitles))
+    .filter((candidate) => !hasEquivalent(candidate.label as string, areaTitles));
+}
+
+function hasNearbyEventBbox(
+  labelBbox: { x: number; y: number; width: number; height: number },
+  eventBboxes: Array<{ x: number; y: number; width: number; height: number }>
+): boolean {
+  return eventBboxes.some((eventBbox) => {
+    const distance = bboxDistance(labelBbox, eventBbox);
+    const verticalDistance = Math.abs(bboxCenter(labelBbox).y - bboxCenter(eventBbox).y);
+    const horizontalDistance = Math.abs(bboxCenter(labelBbox).x - bboxCenter(eventBbox).x);
+
+    return distance <= 460 && verticalDistance <= 150 && horizontalDistance <= 460;
+  });
+}
+
+function normalizeTouchPointCandidateLabel<T extends { label?: string }>(candidate: T): T {
+  if (!candidate.label) {
+    return candidate;
+  }
+  return {
+    ...candidate,
+    label: normalizeTouchPointLabel(candidate.label)
+  };
+}
+
+function normalizeTouchPointLabel(label: string): string {
+  return label
+    .replace(/[|]/g, ' ')
+    .replace(/\bSignin\b/gi, 'Sign In')
+    .replace(/\bSignup\b/gi, 'Sign Up')
+    .replace(/\bP[eé]gina\b/gi, 'Página')
+    .replace(/\bPágina da Curso\b/gi, 'Página do Curso')
+    .replace(/\bPagina da Curso\b/gi, 'Página do Curso')
+    .replace(/\bCriag(?:do| o|eio|éio)\b/gi, 'Criação')
+    .replace(/\bUsuario\b/gi, 'Usuário')
+    .replace(/\bCobranca\b/gi, 'Cobrança')
+    .replace(/\bobranca\b/gi, 'Cobrança')
+    .replace(/\bCheckour\b/gi, 'Checkout')
+    .replace(/\bCadastrads\b/gi, 'Cadastrada')
+    .replace(/\bCriação do do Usuário\b/gi, 'Criação do Usuário')
+    .replace(/\bCriação do do Usuario\b/gi, 'Criação do Usuário')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isReliableTouchPointLabel(label: string): boolean {
+  const key = equivalencePhraseKey(label);
+  const tokens = equivalenceTokens(label);
+  if (key.length < 3 || !/\p{L}/u.test(label)) {
+    return false;
+  }
+  if (/[._]/.test(label) || isFlowLegendHeader(label)) {
+    return false;
+  }
+  if (tokens.length === 0 || tokens.length > 10) {
+    return false;
+  }
+  if (!tokens.some((token) => token.length >= 3)) {
+    return false;
+  }
+  if (tokens.length <= 2 && tokens.some((token) => isLikelyOcrNoiseToken(token))) {
+    return false;
+  }
+  if (hasHighOcrNoiseTokenRatio(tokens) || hasSuspiciousRepeatedTokens(tokens)) {
+    return false;
+  }
+  if (tokens.length === 1 && tokens[0].length < 5) {
+    return false;
+  }
+  if (tokens.every((token) => NON_LABEL_TOKENS.has(token))) {
+    return false;
+  }
+  if (tokens.every((token) => STRUCTURAL_LABEL_TOKENS.has(token))) {
+    return false;
+  }
+  if (tokens.length === 1 && WEAK_SINGLE_WORD_LABELS.has(tokens[0])) {
+    return false;
+  }
+  return true;
+}
+
+function isTechnicalEventLabel(label: string): boolean {
+  return /[._]/.test(label) || /^[a-z]+(?:\.[a-z0-9]+){2,}$/i.test(label.trim());
+}
+
+function isLikelyOcrNoiseToken(token: string): boolean {
+  if (NON_LABEL_TOKENS.has(token)) {
+    return false;
+  }
+  if (token.length <= 2) {
+    return true;
+  }
+  if (token.length <= 4 && !/[aeiou]/i.test(token)) {
+    return true;
+  }
+  if (/^(i+l+|l+i+|jil|iwi|oud|sll|iit|ile|wig|fit|rap|ner|ails|lise)$/i.test(token)) {
+    return true;
+  }
+  return false;
+}
+
+function hasHighOcrNoiseTokenRatio(tokens: string[]): boolean {
+  const meaningfulTokens = tokens.filter((token) => !NON_LABEL_TOKENS.has(token));
+  if (meaningfulTokens.length === 0) {
+    return true;
+  }
+  const noiseCount = meaningfulTokens.filter(isLikelyOcrNoiseToken).length;
+  return noiseCount / meaningfulTokens.length >= 0.4;
+}
+
+function hasSuspiciousRepeatedTokens(tokens: string[]): boolean {
+  const meaningfulTokens = tokens.filter((token) => !NON_LABEL_TOKENS.has(token));
+  if (meaningfulTokens.length < 3) {
+    return false;
+  }
+  const counts = new Map<string, number>();
+  for (const token of meaningfulTokens) {
+    counts.set(token, (counts.get(token) ?? 0) + 1);
+  }
+  return [...counts.values()].some((count) => count >= 3);
+}
+
+const NON_LABEL_TOKENS = new Set([
+  'a', 'an', 'and', 'as', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'in', 'na', 'nas', 'no', 'nos',
+  'o', 'of', 'on', 'op', 'or', 'p', 'para', 'por', 'the', 'to'
+]);
+
+const WEAK_SINGLE_WORD_LABELS = new Set([
+  'done', 'false', 'no', 'nao', 'none', 'null', 'ok', 'sim', 'true', 'yes'
+]);
+
+const STRUCTURAL_LABEL_TOKENS = new Set([
+  'actor', 'actors', 'approver', 'earner', 'integration', 'provider', 'providers', 'role', 'roles',
+  'sistema', 'system', 'user', 'users'
+]);
+
+function mergeAdjacentTouchPointLabelFragments<
+  T extends { id: string; label?: string; bbox: { x: number; y: number; width: number; height: number }; confidence: number; reasoning: string }
+>(candidates: T[]): T[] {
+  const sortedCandidates = [...candidates].sort((left, right) => {
+    if (Math.abs(left.bbox.y - right.bbox.y) > 30) return left.bbox.y - right.bbox.y;
+    return left.bbox.x - right.bbox.x;
+  });
+  const merged: T[] = [];
+  const used = new Set<T>();
+
+  for (const candidate of sortedCandidates) {
+    if (used.has(candidate)) continue;
+    const pair = sortedCandidates.find((other) =>
+      other !== candidate
+      && !used.has(other)
+      && canMergeTouchPointFragments(candidate, other)
+    );
+    if (!pair || !candidate.label || !pair.label) {
+      merged.push(candidate);
+      continue;
+    }
+
+    used.add(candidate);
+    used.add(pair);
+    const left = candidate.bbox.x <= pair.bbox.x ? candidate : pair;
+    const right = left === candidate ? pair : candidate;
+    merged.push({
+      ...left,
+      id: `${left.id}_${right.id}`,
+      label: normalizeTouchPointLabel(`${left.label} ${right.label}`),
+      bbox: mergeBboxes(left.bbox, right.bbox),
+      confidence: Math.max(left.confidence, right.confidence),
+      reasoning: `${left.reasoning} Label textual mesclada com ${right.id} por fragmentação OCR adjacente.`
+    } as T);
+  }
+
+  return merged;
+}
+
+function canMergeTouchPointFragments(
+  left: { label?: string; bbox: { x: number; y: number; width: number; height: number } },
+  right: { label?: string; bbox: { x: number; y: number; width: number; height: number } }
+): boolean {
+  if (!left.label || !right.label) return false;
+  const leftKey = equivalencePhraseKey(left.label);
+  const rightKey = equivalencePhraseKey(right.label);
+  const ordered = left.bbox.x <= right.bbox.x
+    ? [leftKey, rightKey, left.bbox, right.bbox] as const
+    : [rightKey, leftKey, right.bbox, left.bbox] as const;
+  const [firstKey, secondKey, firstBbox, secondBbox] = ordered;
+  const verticalOverlap = bboxOverlap1d(firstBbox.y, firstBbox.y + firstBbox.height, secondBbox.y, secondBbox.y + secondBbox.height);
+  const minHeight = Math.min(firstBbox.height, secondBbox.height);
+  const horizontalGap = secondBbox.x - (firstBbox.x + firstBbox.width);
+
+  return verticalOverlap / Math.max(1, minHeight) >= 0.45
+    && horizontalGap >= -50
+    && horizontalGap <= 35
+    && isLikelyTouchPointFragmentPair(firstKey, secondKey);
+}
+
+function isLikelyTouchPointFragmentPair(firstKey: string, secondKey: string): boolean {
+  const combined = `${firstKey} ${secondKey}`.trim();
+  const firstTokens = firstKey.split(' ').filter(Boolean);
+  const secondTokens = secondKey.split(' ').filter(Boolean);
+  const combinedTokens = [...firstTokens, ...secondTokens];
+
+  if (combinedTokens.length < 2 || combinedTokens.length > 8 || !isReliableTouchPointLabel(combined)) {
+    return false;
+  }
+
+  const firstLooksIncomplete = firstTokens.length <= 2 && (
+    firstTokens.some((token) => NON_LABEL_TOKENS.has(token))
+    || ['da', 'das', 'de', 'do', 'dos', 'of', 'to'].includes(firstTokens[firstTokens.length - 1] ?? '')
+  );
+  const secondLooksIncomplete = secondTokens.length <= 2 && (
+    secondTokens.some((token) => NON_LABEL_TOKENS.has(token))
+    || ['da', 'das', 'de', 'do', 'dos', 'of', 'to'].includes(secondTokens[0] ?? '')
+  );
+
+  return firstLooksIncomplete || secondLooksIncomplete || firstTokens.length === 1 || secondTokens.length === 1;
+}
+
+function mergeBboxes(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number }
+): { x: number; y: number; width: number; height: number } {
+  const minX = Math.min(left.x, right.x);
+  const minY = Math.min(left.y, right.y);
+  const maxX = Math.max(left.x + left.width, right.x + right.width);
+  const maxY = Math.max(left.y + left.height, right.y + right.height);
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
+}
+
+function bboxOverlap1d(leftStart: number, leftEnd: number, rightStart: number, rightEnd: number): number {
+  return Math.max(0, Math.min(leftEnd, rightEnd) - Math.max(leftStart, rightStart));
+}
+
+function mergeTouchPointCandidates<T extends { id: string; label?: string; bbox: { x: number; y: number; width: number; height: number }; confidence: number; reasoning: string }>(
+  candidates: T[]
+): T[] {
+  const byLabel = new Map<string, T>();
+  for (const candidate of candidates) {
+    if (!candidate.label) continue;
+    const key = equivalencePhraseKey(candidate.label);
+    const current = byLabel.get(key);
+    if (!current || touchPointCandidateScore(candidate) > touchPointCandidateScore(current)) {
+      byLabel.set(key, candidate);
+    }
+  }
+  return removeFragmentTouchPointCandidates([...byLabel.values()]).sort((left, right) => {
+    if (Math.abs(left.bbox.y - right.bbox.y) > 40) return left.bbox.y - right.bbox.y;
+    return left.bbox.x - right.bbox.x;
+  });
+}
+
+function removeFragmentTouchPointCandidates<T extends { label?: string }>(candidates: T[]): T[] {
+  return candidates.filter((candidate) => {
+    if (!candidate.label) return false;
+    return !candidates.some((other) =>
+      other !== candidate
+      && other.label
+      && isLabelFragmentOf(candidate.label as string, other.label)
+    );
+  });
+}
+
+function isLabelFragmentOfAny(label: string, candidates: string[]): boolean {
+  return candidates.some((candidate) => isLabelFragmentOf(label, candidate));
+}
+
+function isLabelFragmentOf(label: string, candidate: string): boolean {
+  const labelTokens = equivalenceTokens(label);
+  const candidateTokens = equivalenceTokens(candidate);
+  if (labelTokens.length === 0 || candidateTokens.length <= labelTokens.length) {
+    return false;
+  }
+  return tokensContainSequence(candidateTokens, labelTokens)
+    && (labelTokens.length <= 2 || labelTokens.length / candidateTokens.length <= 0.75);
+}
+
+function touchPointCandidateScore(candidate: { label?: string; bbox: { width: number; height: number }; confidence: number }): number {
+  const labelScore = candidate.label ? Math.min(4, equivalencePhraseKey(candidate.label).split(' ').length) : 0;
+  return candidate.confidence + labelScore + Math.min(1, (candidate.bbox.width * candidate.bbox.height) / 20000);
+}
+
+function labelGeometryCandidates<T extends { id: string; bbox: { x: number; y: number; width: number; height: number }; label?: string }>(
+  candidates: T[],
+  flowLegendDetections: FlowLegendDetections | null,
+  kind: 'area' | 'touch_point'
+): T[] {
+  const ocrTexts = flowLegendDetections?.ocrTexts ?? [];
+  return candidates.map((candidate) => {
+    const label = kind === 'area'
+      ? areaLabelFromOcr(candidate.bbox, ocrTexts)
+      : touchPointLabelFromOcr(candidate.bbox, ocrTexts);
+    return {
+      ...candidate,
+      label: candidate.label ?? label
+    };
+  });
+}
+
+function touchPointLabelFromOcr(
+  bbox: { x: number; y: number; width: number; height: number },
+  ocrTexts: FlowLegendDetections['ocrTexts']
+): string | undefined {
+  const inside = ocrTexts
+    .filter((text) => text.bbox && isUsableShapeLabelText(text) && bboxContains(expandBbox(bbox, 6), text.bbox))
+    .sort((left, right) => {
+      const leftBox = left.bbox as NonNullable<typeof left.bbox>;
+      const rightBox = right.bbox as NonNullable<typeof right.bbox>;
+      if (Math.abs(leftBox.y - rightBox.y) > 8) return leftBox.y - rightBox.y;
+      return leftBox.x - rightBox.x;
+    });
+
+  return joinShapeLabelLines(inside.map((text) => text.text));
+}
+
+function isUsableShapeLabelText(text: FlowLegendDetections['ocrTexts'][number]): boolean {
+  if (text.confidence < 55) {
+    return false;
+  }
+  if (isFlowLegendHeader(text.text)) {
+    return false;
+  }
+  if (/^(op|integration)$/i.test(text.text.trim())) {
+    return false;
+  }
+  return true;
+}
+
+function areaLabelFromOcr(
+  bbox: { x: number; y: number; width: number; height: number },
+  ocrTexts: FlowLegendDetections['ocrTexts']
+): string | undefined {
+  const headerBand = {
+    x: bbox.x,
+    y: Math.max(0, bbox.y - 70),
+    width: bbox.width,
+    height: Math.min(bbox.height, 110)
+  };
+  const candidates = ocrTexts
+    .filter((text) => text.bbox && !text.needsOcrReview && bboxContains(headerBand, text.bbox))
+    .filter((text) => !isFlowLegendHeader(text.text))
+    .map((text) => ({
+      ...text,
+      text: normalizeTouchPointLabel(text.text)
+    }))
+    .filter((text) => isReliableAreaLabel(text.text))
+    .sort((left, right) => {
+      const leftBox = left.bbox as NonNullable<typeof left.bbox>;
+      const rightBox = right.bbox as NonNullable<typeof right.bbox>;
+      if (Math.abs(leftBox.y - rightBox.y) > 8) return leftBox.y - rightBox.y;
+      return leftBox.x - rightBox.x;
+    });
+
+  return candidates
+    .sort((left, right) => {
+      const confidenceDelta = right.confidence - left.confidence;
+      if (Math.abs(confidenceDelta) > 8) return confidenceDelta;
+      return right.text.length - left.text.length;
+    })[0]?.text;
+}
+
+function isReliableAreaLabel(label: string): boolean {
+  if (isTechnicalEventLabel(label)) {
+    return false;
+  }
+  const tokens = equivalenceTokens(label);
+  const meaningfulTokens = tokens.filter((token) => !NON_LABEL_TOKENS.has(token));
+  if (meaningfulTokens.length < 2) {
+    return false;
+  }
+  if (hasHighOcrNoiseTokenRatio(tokens) || hasSuspiciousRepeatedTokens(tokens)) {
+    return false;
+  }
+  return true;
+}
+
+function joinShapeLabelLines(lines: string[]): string | undefined {
+  const filtered = lines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 1)
+    .filter((line) => !isFlowLegendHeader(line))
+    .filter((line) => !/^(op|integration)$/i.test(line));
+  if (filtered.length === 0) {
+    return undefined;
+  }
+  return uniqueStrings(filtered).join(' ');
+}
+
+function isFlowLegendHeader(value: string): boolean {
+  return /caminho\s+(feliz|alternativo|principal)|fluxo\s+(principal|alternativo)|happy\s+path|alternate\s+path/i
+    .test(value.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+function buildSpatialCorrelations(
+  events: Array<OcrEventCandidates['trusted'][number]>,
+  touchPointCandidates: Array<{ id: string; label?: string; bbox: { x: number; y: number; width: number; height: number } }>
+): ImageObservation['touchPointEventCorrelations'] {
+  const byTouchPoint = new Map<string, string[]>();
+
+  for (const event of events) {
+    if (!event.bbox || touchPointCandidates.length === 0) {
+      continue;
+    }
+
+    const nearest = touchPointCandidates
+      .map((candidate, index) => ({
+        title: candidate.label ?? `Touch Point ${index + 1}`,
+        distance: bboxDistance(event.bbox as NonNullable<typeof event.bbox>, candidate.bbox)
+      }))
+      .sort((left, right) => left.distance - right.distance)[0];
+    if (!nearest) continue;
+    byTouchPoint.set(nearest.title, [...(byTouchPoint.get(nearest.title) ?? []), event.eventTitle]);
+  }
+
+  return [...byTouchPoint.entries()].map(([touchPointTitle, eventsObservedAroundTouchPoint]) => ({
+    touchPointTitle,
+    eventsObservedAroundTouchPoint,
+    confidence: 0.58,
+    reasoning: 'Correlação criada por menor distância entre bbox do evento OCR e bbox da caixa candidata.'
+  }));
+}
+
+function buildSpatialFlows(
+  events: Array<OcrEventCandidates['trusted'][number]>,
+  touchPointsDetected: string[],
+  arrowDetections: ArrowDetections | null,
+  flowLegendDetections: FlowLegendDetections | null
+): ImageObservation['flowsDetected'] {
+  const eventTitleByKey = new Map(events.map((event) => [equivalenceKey(event.eventTitle), event.eventTitle]));
+  const legendFlows = (flowLegendDetections?.legends ?? [])
+    .map((legend) => ({
+      name: legend.name,
+      flowType: legend.flowType,
+      arrowStyle: legend.flowType === 'alternate' ? 'dashed' as const : 'solid' as const,
+      orderedEventTitles: legend.orderedEventTitles
+        .map((eventTitle) => eventTitleByKey.get(equivalenceKey(eventTitle)))
+        .filter((eventTitle): eventTitle is string => Boolean(eventTitle)),
+      touchPoints: touchPointsDetected,
+      confidence: legend.confidence,
+      reasoning: 'Fluxo derivado deterministicamente da legenda OCR; touch points foram aproximados por geometria.'
+    }))
+    .filter((flow) => flow.orderedEventTitles.length > 0);
+
+  if (legendFlows.length > 0) {
+    return legendFlows;
+  }
+
+  const orderedEventTitles = events
+    .filter((event) => event.bbox)
+    .sort((left, right) => {
+      const leftBox = left.bbox as NonNullable<typeof left.bbox>;
+      const rightBox = right.bbox as NonNullable<typeof right.bbox>;
+      if (Math.abs(leftBox.y - rightBox.y) > 80) return leftBox.y - rightBox.y;
+      return leftBox.x - rightBox.x;
+    })
+    .map((event) => event.eventTitle);
+  if (orderedEventTitles.length === 0) {
+    return [];
+  }
+
+  const primaryArrow = arrowDetections?.arrows[0];
+  return [{
+    name: primaryArrow?.flowType === 'alternate' ? 'Fluxo Alternativo Detectado' : 'Fluxo Principal Detectado',
+    flowType: primaryArrow?.flowType ?? 'unknown',
+    arrowStyle: primaryArrow?.arrowStyle ?? 'unknown',
+    orderedEventTitles,
+    touchPoints: touchPointsDetected,
+    confidence: primaryArrow ? 0.5 : 0.38,
+    reasoning: primaryArrow
+      ? 'Fluxo ordenado por posição espacial dos eventos e anotado com a primeira seta detectada.'
+      : 'Fluxo ordenado por posição espacial dos eventos; nenhuma seta confiável foi detectada.'
+  }];
+}
+
 function buildObservePromptContext(
   ocrEventCandidates: OcrEventCandidates | null,
   ocrTextObservations: ImageObservation['textObservations'],
-  ocrObservation: OcrObservation | null
+  ocrObservation: OcrObservation | null,
+  supportingOcrObservation: OcrObservation | null,
+  shapeGeometry: ShapeGeometry | null,
+  arrowDetections: ArrowDetections | null,
+  flowLegendDetections: FlowLegendDetections | null,
+  spatialObservation: OcrPromptContext['spatialComposition'] | null
 ): OcrPromptContext {
   const trusted = ocrEventCandidates?.trusted ?? [];
   const uncertain = ocrEventCandidates?.uncertain ?? [];
+  const trustedProtagonists = trusted.filter((candidate) => candidate.role === 'protagonist');
+  const trustedSupporting = trusted.filter((candidate) => candidate.role === 'supporting');
 
   return {
-    protagonistEventTitles: trusted.map((candidate) => candidate.eventTitle),
+    protagonistEventTitles: trustedProtagonists.map((candidate) => candidate.eventTitle),
+    supportingEventTitles: trustedSupporting.map((candidate) => candidate.eventTitle),
     textObservations: ocrTextObservations,
     eventVisualSemantics: trusted.map((candidate) => ({
       eventTitle: candidate.eventTitle,
-      role: 'protagonist' as const,
-      colorHex: '#FF0000' as const,
+      role: candidate.role,
+      colorHex: candidate.colorHex,
       confidence: candidate.confidence,
-      reasoning: 'Classificação determinística: label técnica vermelha detectada por OCR clássico.'
+      reasoning: `Classificação determinística: label técnica ${candidate.role === 'protagonist' ? 'vermelha' : 'azul'} detectada por OCR clássico.`
     })),
+    touchPointCandidates: shapeGeometry?.touchPointCandidates ?? [],
+    areaCandidates: shapeGeometry?.areaCandidates ?? [],
+    arrowDetections: arrowDetections?.arrows ?? [],
+    flowLegends: flowLegendDetections?.legends ?? [],
+    spatialComposition: spatialObservation ?? undefined,
     uncertainItems: uncertain.map((candidate) => candidate.eventTitle),
     assumptions: [
       ...(ocrEventCandidates?.assumptions ?? []),
-      ...(ocrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR: ${ocrObservation.preprocessedImage}`] : [])
+      ...(ocrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR vermelho: ${ocrObservation.preprocessedImage}`] : []),
+      ...(supportingOcrObservation?.preprocessedImage ? [`Imagem preprocessada usada pelo OCR azul: ${supportingOcrObservation.preprocessedImage}`] : []),
+      ...(shapeGeometry?.assumptions ?? []),
+      ...(arrowDetections?.assumptions ?? []),
+      ...(flowLegendDetections?.assumptions ?? []),
+      ...(spatialObservation?.assumptions ?? [])
     ],
     genAiResponsibilities: [
-      'Validar visualmente labels OCR marcadas como incertas usando a imagem original e crops de revisão.',
-      'Detectar labels azuis coadjuvantes que o OCR vermelho não cobre.',
-      'Detectar áreas, caixas operacionais internas, setas, estilos de seta e ordem de fluxo.',
-      'Associar eventos aos touch points e produzir flowsDetected/touchPointEventCorrelations.'
+      'Validar visualmente itens com baixa confiança dos steps determinísticos.',
+      'Complementar labels ou estruturas que os detectores clássicos não tenham encontrado.',
+      'Resolver ambiguidades de direção de seta, nome de touch point e associação espacial quando a heurística não for suficiente.'
     ]
+  };
+}
+
+function bboxContains(
+  outer: { x: number; y: number; width: number; height: number },
+  inner: { x: number; y: number; width: number; height: number }
+): boolean {
+  const innerCenter = bboxCenter(inner);
+  return innerCenter.x >= outer.x
+    && innerCenter.x <= outer.x + outer.width
+    && innerCenter.y >= outer.y
+    && innerCenter.y <= outer.y + outer.height;
+}
+
+function expandBbox(
+  bbox: { x: number; y: number; width: number; height: number },
+  padding: number
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: Math.max(0, bbox.x - padding),
+    y: Math.max(0, bbox.y - padding),
+    width: bbox.width + padding * 2,
+    height: bbox.height + padding * 2
+  };
+}
+
+function bboxDistance(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number }
+): number {
+  const leftCenter = bboxCenter(left);
+  const rightCenter = bboxCenter(right);
+  return Math.hypot(leftCenter.x - rightCenter.x, leftCenter.y - rightCenter.y);
+}
+
+function bboxCenter(bbox: { x: number; y: number; width: number; height: number }): { x: number; y: number } {
+  return {
+    x: bbox.x + bbox.width / 2,
+    y: bbox.y + bbox.height / 2
   };
 }
 
@@ -832,26 +1729,83 @@ function locationHintFromBbox(bbox: OcrEventCandidates['trusted'][number]['bbox'
   return `bbox x=${bbox.x}, y=${bbox.y}, w=${bbox.width}, h=${bbox.height}`;
 }
 
+function buildDeterministicImageObservation(ocrPromptContext: OcrPromptContext | null): ImageObservation {
+  const spatial = ocrPromptContext?.spatialComposition;
+
+  return {
+    areasDetected: spatial?.areasDetected ?? [],
+    touchPointsDetected: spatial?.touchPointsDetected ?? [],
+    textsOutsideShapes: uniqueStrings([
+      ...(ocrPromptContext?.protagonistEventTitles ?? []),
+      ...(ocrPromptContext?.supportingEventTitles ?? []),
+      ...(spatial?.textsOutsideShapes ?? [])
+    ]),
+    textObservations: ocrPromptContext?.textObservations ?? [],
+    eventVisualSemantics: ocrPromptContext?.eventVisualSemantics ?? [],
+    touchPointEventCorrelations: spatial?.touchPointEventCorrelations ?? [],
+    flowsDetected: spatial?.flowsDetected ?? [],
+    actorsDetected: [],
+    servicesDetected: [],
+    uncertainItems: ocrPromptContext?.uncertainItems ?? [],
+    assumptions: uniqueStrings([
+      'Observação gerada deterministicamente antes do prompt observe-image.',
+      ...(ocrPromptContext?.assumptions ?? []),
+      ...(spatial?.assumptions ?? [])
+    ])
+  };
+}
+
 function sanitizeImageObservation(
   observation: ImageObservation,
   ocrPromptContext: OcrPromptContext | null = null
 ): ImageObservation {
-  const textsOutsideShapes = uniqueStrings([
+  const rawTextsOutsideShapes = uniqueStrings([
     ...observation.textsOutsideShapes,
-    ...(ocrPromptContext?.protagonistEventTitles ?? [])
+    ...(ocrPromptContext?.protagonistEventTitles ?? []),
+    ...(ocrPromptContext?.supportingEventTitles ?? []),
+    ...(ocrPromptContext?.spatialComposition?.textsOutsideShapes ?? [])
   ]);
-  const areasDetected = uniqueStrings(observation.areasDetected);
-  const rawTouchPointsDetected = uniqueStrings(observation.touchPointsDetected);
-  const touchPointsDetected = rawTouchPointsDetected.filter((touchPointTitle) => !textsOutsideShapes.includes(touchPointTitle));
-  const droppedTouchPoints = rawTouchPointsDetected.filter((touchPointTitle) => textsOutsideShapes.includes(touchPointTitle));
+  const areasDetected = uniqueStrings([
+    ...observation.areasDetected,
+    ...(ocrPromptContext?.spatialComposition?.areasDetected ?? [])
+  ]);
+  const areaKeys = new Set(areasDetected.map(equivalenceKey));
+  const textsOutsideShapes = removeFragmentTexts(rawTextsOutsideShapes)
+    .filter((text) => !areaKeys.has(equivalenceKey(text)));
+  const rawTouchPointsDetected = uniqueStrings([
+    ...observation.touchPointsDetected,
+    ...(ocrPromptContext?.spatialComposition?.touchPointsDetected ?? [])
+  ]);
+  const touchPointsDetected = rawTouchPointsDetected
+    .filter((touchPointTitle) => !hasEquivalent(touchPointTitle, areasDetected))
+    .filter((touchPointTitle) => !isTechnicalEventLabel(touchPointTitle))
+    .filter((touchPointTitle) => isReliableTouchPointLabel(touchPointTitle));
+  const droppedTouchPoints = rawTouchPointsDetected
+    .filter((touchPointTitle) => hasEquivalent(touchPointTitle, areasDetected));
   const uncertainItems = uniqueStrings(observation.uncertainItems);
   const roleByEvent = new Map(
-    observation.eventVisualSemantics.map((semantic) => [
+    [
+      ...(ocrPromptContext?.eventVisualSemantics ?? []),
+      ...observation.eventVisualSemantics
+    ].map((semantic) => [
       semantic.eventTitle.trim(),
       roleFromColor(semantic.colorHex, semantic.role)
     ])
   );
-  const touchPointByEvent = deriveTouchPointAssignment(observation.flowsDetected, roleByEvent, touchPointsDetected);
+  const mergedFlowsForAssignment = [
+    ...(ocrPromptContext?.spatialComposition?.flowsDetected ?? []),
+    ...observation.flowsDetected
+  ];
+  const rawCorrelationsForAssignment = [
+    ...(ocrPromptContext?.spatialComposition?.touchPointEventCorrelations ?? []),
+    ...observation.touchPointEventCorrelations
+  ];
+  const touchPointByEvent = shouldPreferSpatialCorrelationAssignment(mergedFlowsForAssignment)
+    ? mergeTouchPointAssignments(
+      deriveTouchPointAssignmentFromCorrelations(rawCorrelationsForAssignment, touchPointsDetected, textsOutsideShapes),
+      deriveTouchPointAssignment(mergedFlowsForAssignment, roleByEvent, touchPointsDetected)
+    )
+    : deriveTouchPointAssignment(mergedFlowsForAssignment, roleByEvent, touchPointsDetected);
   const touchPointReassignments = collectTouchPointReassignments(
     observation.touchPointEventCorrelations,
     touchPointByEvent
@@ -863,14 +1817,19 @@ function sanitizeImageObservation(
     touchPointsDetected,
     textsOutsideShapes,
     textObservations: mergeTextObservations(ocrPromptContext?.textObservations ?? [], observation.textObservations)
-      .map((textObservation) => ({
-        ...textObservation,
-        text: textObservation.text.trim(),
-        locationHint: textObservation.locationHint?.trim(),
-        ocrAlternatives: uniqueStrings(textObservation.ocrAlternatives),
-        ambiguousCharacters: uniqueStrings(textObservation.ambiguousCharacters),
-        reasoning: textObservation.reasoning.trim()
-      }))
+      .map((textObservation) => normalizeTextObservationKind(
+        {
+          ...textObservation,
+          text: textObservation.text.trim(),
+          locationHint: textObservation.locationHint?.trim(),
+          ocrAlternatives: uniqueStrings(textObservation.ocrAlternatives),
+          ambiguousCharacters: uniqueStrings(textObservation.ambiguousCharacters),
+          reasoning: textObservation.reasoning.trim()
+        },
+        touchPointsDetected,
+        areasDetected,
+        textsOutsideShapes
+      ))
       .filter((textObservation) => textObservation.text !== ''),
     eventVisualSemantics: mergeEventVisualSemantics(ocrPromptContext?.eventVisualSemantics ?? [], observation.eventVisualSemantics)
       .map((semantic) => ({
@@ -879,33 +1838,70 @@ function sanitizeImageObservation(
         role: roleFromColor(semantic.colorHex, semantic.role),
         reasoning: semantic.reasoning.trim()
       }))
-      .filter((semantic) => semantic.eventTitle !== '' && textsOutsideShapes.includes(semantic.eventTitle)),
+      .filter((semantic) => semantic.eventTitle !== '' && hasEquivalent(semantic.eventTitle, textsOutsideShapes)),
     touchPointEventCorrelations: rebuildTouchPointEventCorrelations(
-      observation.touchPointEventCorrelations,
+      [
+        ...(ocrPromptContext?.spatialComposition?.touchPointEventCorrelations ?? []),
+        ...observation.touchPointEventCorrelations
+      ],
       touchPointByEvent,
       touchPointsDetected,
       textsOutsideShapes
     ),
-    flowsDetected: observation.flowsDetected
+    flowsDetected: uniqueFlows([
+      ...(ocrPromptContext?.spatialComposition?.flowsDetected ?? []),
+      ...observation.flowsDetected
+    ]
       .map((flow) => ({
         ...flow,
         name: flow.name.trim(),
         orderedEventTitles: uniqueStrings(flow.orderedEventTitles)
-          .filter((eventTitle) => textsOutsideShapes.includes(eventTitle)),
-        touchPoints: uniqueStrings(flow.touchPoints)
-          .filter((touchPointTitle) => touchPointsDetected.includes(touchPointTitle)),
+          .filter((eventTitle) => hasEquivalent(eventTitle, textsOutsideShapes)),
+        touchPoints: uniqueFlowTouchPoints(flow, touchPointByEvent, touchPointsDetected),
         reasoning: flow.reasoning.trim()
       }))
-      .filter((flow) => flow.name !== '' && flow.orderedEventTitles.length > 0),
+      .filter((flow) => flow.name !== '' && flow.orderedEventTitles.length > 0)),
     actorsDetected: uniqueStrings(observation.actorsDetected),
     servicesDetected: uniqueStrings(observation.servicesDetected),
     uncertainItems,
     assumptions: uniqueStrings([
       ...buildObservationAssumptions(uncertainItems, droppedTouchPoints, touchPointReassignments),
       ...(ocrPromptContext?.assumptions ?? []),
+      ...(ocrPromptContext?.spatialComposition?.assumptions ?? []),
       ...observation.assumptions
     ])
   };
+}
+
+function uniqueFlowTouchPoints(
+  flow: ImageObservation['flowsDetected'][number],
+  touchPointByEvent: Map<string, string>,
+  validTouchPoints: string[]
+): string[] {
+  const assigned = flow.orderedEventTitles
+    .map((eventTitle) => touchPointByEvent.get(eventTitle.trim()))
+    .filter((touchPointTitle): touchPointTitle is string => Boolean(touchPointTitle))
+    .filter((touchPointTitle) => hasEquivalent(touchPointTitle, validTouchPoints));
+  if (assigned.length > 0) {
+    return uniqueStrings(assigned);
+  }
+  return uniqueStrings(flow.touchPoints)
+    .filter((touchPointTitle) => hasEquivalent(touchPointTitle, validTouchPoints));
+}
+
+function uniqueFlows(flows: ImageObservation['flowsDetected']): ImageObservation['flowsDetected'] {
+  const bySignature = new Map<string, ImageObservation['flowsDetected'][number]>();
+  for (const flow of flows) {
+    const signature = [
+      equivalenceKey(flow.name),
+      flow.flowType,
+      flow.arrowStyle,
+      flow.orderedEventTitles.map(equivalenceKey).join('|')
+    ].join('::');
+    const current = bySignature.get(signature);
+    bySignature.set(signature, current && current.confidence >= flow.confidence ? current : flow);
+  }
+  return [...bySignature.values()];
 }
 
 function mergeTextObservations(
@@ -922,6 +1918,111 @@ function mergeTextObservations(
     byText.set(key, current && current.confidence >= item.confidence ? current : item);
   }
   return [...byText.values()];
+}
+
+function normalizeTextObservationKind(
+  textObservation: ImageObservation['textObservations'][number],
+  touchPointsDetected: string[],
+  areasDetected: string[],
+  textsOutsideShapes: string[]
+): ImageObservation['textObservations'][number] {
+  if (textObservation.kind === 'area' && hasEquivalent(textObservation.text, touchPointsDetected)) {
+    return {
+      ...textObservation,
+      kind: 'structural',
+      reasoning: `${textObservation.reasoning} Normalizado para structural porque a label também aparecia como touch point.`
+    };
+  }
+
+  if (textObservation.kind === 'touch_point') {
+    if (!hasEquivalent(textObservation.text, touchPointsDetected) || hasEquivalent(textObservation.text, areasDetected) || looksLikeContextEvidence(textObservation)) {
+      return {
+        ...textObservation,
+        kind: 'structural',
+        reasoning: `${textObservation.reasoning} Normalizado para structural porque a evidência indicava área/contexto ou a label foi removida de touchPointsDetected.`
+      };
+    }
+  }
+
+  if (textObservation.kind === 'event_candidate' && (!hasEquivalent(textObservation.text, textsOutsideShapes) || hasEquivalent(textObservation.text, areasDetected))) {
+    return {
+      ...textObservation,
+      kind: 'uncertain',
+      reasoning: `${textObservation.reasoning} Normalizado para uncertain porque não está em textsOutsideShapes ou colide com área/contexto.`
+    };
+  }
+
+  return textObservation;
+}
+
+function hasEquivalent(value: string, candidates: string[]): boolean {
+  const key = equivalenceKey(value);
+  return candidates.some((candidate) => equivalenceKey(candidate) === key);
+}
+
+function removeFragmentTexts(texts: string[]): string[] {
+  const uniqueTexts = uniqueStrings(texts);
+  return uniqueTexts.filter((text, index) => {
+    const textTokens = equivalenceTokens(text);
+    if (textTokens.length === 0) {
+      return false;
+    }
+
+    return !uniqueTexts.some((other, otherIndex) => {
+      if (index === otherIndex) {
+        return false;
+      }
+      const otherTokens = equivalenceTokens(other);
+      if (otherTokens.length <= textTokens.length) {
+        return false;
+      }
+      if (!tokensContainSequence(otherTokens, textTokens)) {
+        return false;
+      }
+      return textTokens.length <= 2 || textTokens.length / otherTokens.length <= 0.75;
+    });
+  });
+}
+
+function equivalenceTokens(value: string): string[] {
+  return equivalenceKey(value).split('_').filter(Boolean);
+}
+
+function equivalencePhraseKey(value: string): string {
+  return equivalenceKey(value).replace(/_/g, ' ');
+}
+
+function tokensContainSequence(container: string[], sequence: string[]): boolean {
+  if (sequence.length === 0 || sequence.length > container.length) {
+    return false;
+  }
+  for (let start = 0; start <= container.length - sequence.length; start += 1) {
+    if (sequence.every((token, index) => token === container[start + index])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function equivalenceKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/ç/g, 'c')
+    .replace(/nga/g, 'nca')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function looksLikeContextEvidence(textObservation: ImageObservation['textObservations'][number]): boolean {
+  const evidence = [
+    textObservation.locationHint || '',
+    textObservation.reasoning || ''
+  ].join(' ');
+
+  return /\b(swimlane|raia|lane|área|area|dom[ií]nio|domain|sistema|system|agrupador|container|cont[eê]iner|contexto|estrutural|structural)\b/i
+    .test(evidence);
 }
 
 function mergeEventVisualSemantics(
@@ -963,6 +2064,7 @@ function deriveTouchPointAssignment(
     let touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, 0);
     let lastObservedTouchPoint: string | undefined;
     const pendingEvents: string[] = [];
+    const hasExplicitProtagonists = flow.orderedEventTitles.some((eventTitle) => roleByEvent.get(eventTitle) === 'protagonist');
 
     for (const eventTitle of flow.orderedEventTitles) {
       const existingOwner = assignment.get(eventTitle);
@@ -977,13 +2079,15 @@ function deriveTouchPointAssignment(
         continue;
       }
 
-      if (role === 'protagonist') {
+      if (role === 'protagonist' || !hasExplicitProtagonists) {
         const owner = touchPointCursor !== -1
           ? orderedTouchPoints[touchPointCursor]
           : lastObservedTouchPoint || orderedTouchPoints[orderedTouchPoints.length - 1];
 
         assignment.set(eventTitle, owner);
-        touchPointsWithProtagonist.add(owner);
+        if (role === 'protagonist') {
+          touchPointsWithProtagonist.add(owner);
+        }
 
         const pendingOwner = lastObservedTouchPoint || owner;
         for (const pendingEvent of pendingEvents) {
@@ -993,7 +2097,9 @@ function deriveTouchPointAssignment(
         }
         pendingEvents.length = 0;
         lastObservedTouchPoint = owner;
-        touchPointCursor = nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, touchPointCursor === -1 ? 0 : touchPointCursor + 1);
+        touchPointCursor = role === 'protagonist'
+          ? nextAvailableTouchPoint(orderedTouchPoints, touchPointsWithProtagonist, touchPointCursor === -1 ? 0 : touchPointCursor + 1)
+          : Math.min(orderedTouchPoints.length - 1, (touchPointCursor === -1 ? 0 : touchPointCursor) + 1);
         continue;
       }
 
@@ -1012,6 +2118,36 @@ function deriveTouchPointAssignment(
   }
 
   return assignment;
+}
+
+function shouldPreferSpatialCorrelationAssignment(flows: ImageObservation['flowsDetected']): boolean {
+  return flows.length > 0
+    && flows.every((flow) => /posição espacial|posicao espacial/i.test(flow.reasoning));
+}
+
+function deriveTouchPointAssignmentFromCorrelations(
+  correlations: ImageObservation['touchPointEventCorrelations'],
+  validTouchPoints: string[],
+  observedEvents: string[]
+): Map<string, string> {
+  const assignment = new Map<string, string>();
+  const observedEventKeys = new Set(observedEvents.map(equivalenceKey));
+  for (const correlation of correlations) {
+    if (!hasEquivalent(correlation.touchPointTitle, validTouchPoints)) continue;
+    for (const eventTitle of correlation.eventsObservedAroundTouchPoint) {
+      if (!observedEventKeys.has(equivalenceKey(eventTitle))) continue;
+      assignment.set(eventTitle.trim(), correlation.touchPointTitle.trim());
+    }
+  }
+  return assignment;
+}
+
+function mergeTouchPointAssignments(primary: Map<string, string>, fallback: Map<string, string>): Map<string, string> {
+  const merged = new Map(fallback);
+  for (const [eventTitle, touchPointTitle] of primary.entries()) {
+    merged.set(eventTitle, touchPointTitle);
+  }
+  return merged;
 }
 
 function nextAvailableTouchPoint(
@@ -1089,7 +2225,7 @@ function rebuildTouchPointEventCorrelations(
   }
 
   for (const [eventTitle, touchPointTitle] of touchPointByEvent.entries()) {
-    if (!observedEvents.includes(eventTitle)) {
+    if (!hasEquivalent(eventTitle, observedEvents)) {
       continue;
     }
     const correlation = correlationByTouchPoint.get(touchPointTitle);

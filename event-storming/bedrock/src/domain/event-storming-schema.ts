@@ -47,8 +47,8 @@ export const OcrObservationSchema = z.object({
 
 export const OcrEventCandidateSchema = z.object({
   eventTitle: z.string().min(1),
-  role: z.literal('protagonist'),
-  colorHex: z.literal('#FF0000'),
+  role: z.enum(['protagonist', 'supporting']),
+  colorHex: z.enum(['#FF0000', '#305CDE']),
   confidence: z.number().min(0).max(1),
   source: z.string().min(1),
   bbox: OcrTextSchema.shape.bbox,
@@ -64,21 +64,58 @@ export const OcrEventCandidatesSchema = z.object({
   assumptions: z.array(z.string())
 });
 
+export const GeometryCandidateSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).optional(),
+  bbox: OcrTextSchema.shape.bbox.unwrap(),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1)
+});
+
+export const ShapeGeometrySchema = z.object({
+  imageWidth: z.number().int().positive(),
+  imageHeight: z.number().int().positive(),
+  touchPointCandidates: z.array(GeometryCandidateSchema),
+  areaCandidates: z.array(GeometryCandidateSchema),
+  assumptions: z.array(z.string())
+});
+
+export const ArrowGeometrySchema = z.object({
+  id: z.string().min(1),
+  arrowStyle: ObservedArrowStyleSchema,
+  flowType: ObservedFlowTypeSchema,
+  bbox: OcrTextSchema.shape.bbox.unwrap(),
+  direction: z.enum(['left_to_right', 'right_to_left', 'top_to_bottom', 'bottom_to_top', 'unknown']),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1)
+});
+
+export const ArrowDetectionsSchema = z.object({
+  arrows: z.array(ArrowGeometrySchema),
+  assumptions: z.array(z.string())
+});
+
+export const FlowLegendSchema = z.object({
+  name: z.string().min(1),
+  flowType: ObservedFlowTypeSchema,
+  bbox: OcrTextSchema.shape.bbox.optional(),
+  orderedEventTitles: z.array(z.string().min(1)),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1)
+});
+
+export const FlowLegendDetectionsSchema = z.object({
+  legends: z.array(FlowLegendSchema),
+  ocrTexts: z.array(OcrTextSchema),
+  assumptions: z.array(z.string())
+});
+
 export const EventVisualSemanticSchema = z.object({
   eventTitle: z.string().min(1),
   role: ObservedEventRoleSchema,
   colorHex: ObservedColorSchema,
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1)
-});
-
-export const OcrPromptContextSchema = z.object({
-  protagonistEventTitles: z.array(z.string().min(1)),
-  textObservations: z.array(ObservedTextSchema),
-  eventVisualSemantics: z.array(EventVisualSemanticSchema),
-  uncertainItems: z.array(z.string().min(1)),
-  assumptions: z.array(z.string()),
-  genAiResponsibilities: z.array(z.string().min(1))
 });
 
 export const TouchPointCorrelationSchema = z.object({
@@ -96,6 +133,28 @@ export const ObservedFlowSchema = z.object({
   touchPoints: z.array(z.string().min(1)),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1)
+});
+
+export const OcrPromptContextSchema = z.object({
+  protagonistEventTitles: z.array(z.string().min(1)),
+  supportingEventTitles: z.array(z.string().min(1)).default([]),
+  textObservations: z.array(ObservedTextSchema),
+  eventVisualSemantics: z.array(EventVisualSemanticSchema),
+  touchPointCandidates: z.array(GeometryCandidateSchema).default([]),
+  areaCandidates: z.array(GeometryCandidateSchema).default([]),
+  arrowDetections: z.array(ArrowGeometrySchema).default([]),
+  flowLegends: z.array(FlowLegendSchema).default([]),
+  spatialComposition: z.object({
+    touchPointsDetected: z.array(z.string()),
+    areasDetected: z.array(z.string()),
+    textsOutsideShapes: z.array(z.string()),
+    touchPointEventCorrelations: z.array(TouchPointCorrelationSchema),
+    flowsDetected: z.array(ObservedFlowSchema),
+    assumptions: z.array(z.string())
+  }).optional(),
+  uncertainItems: z.array(z.string().min(1)),
+  assumptions: z.array(z.string()),
+  genAiResponsibilities: z.array(z.string().min(1))
 });
 
 export const ImageObservationSchema = z.object({
@@ -217,6 +276,9 @@ export const PROJECT_FORMAT_COLUMNS = [
 export type ImageObservation = z.infer<typeof ImageObservationSchema>;
 export type OcrObservation = z.infer<typeof OcrObservationSchema>;
 export type OcrEventCandidates = z.infer<typeof OcrEventCandidatesSchema>;
+export type ShapeGeometry = z.infer<typeof ShapeGeometrySchema>;
+export type ArrowDetections = z.infer<typeof ArrowDetectionsSchema>;
+export type FlowLegendDetections = z.infer<typeof FlowLegendDetectionsSchema>;
 export type OcrPromptContext = z.infer<typeof OcrPromptContextSchema>;
 export type CandidateContext = z.infer<typeof CandidateContextSchema>;
 export type NormalizationReview = z.infer<typeof NormalizationReviewSchema>;
