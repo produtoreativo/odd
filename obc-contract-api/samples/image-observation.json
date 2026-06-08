@@ -1,0 +1,357 @@
+{
+  "areasDetected": [
+    "System of Record (SOR) for payments",
+    "PSPs (Payment Service Providers)"
+  ],
+  "touchPointsDetected": [
+    "Cobrança via Checkout",
+    "Processamento de Pagamentos",
+    "Cadastro de Cliente"
+  ],
+  "textsOutsideShapes": [
+    "Intenção de Pagamento salva",
+    "Cliente Encontrado",
+    "Pagamento Pendente",
+    "Fatura Criada",
+    "Cliente Não Encontrado",
+    "Cliente Cadastrado",
+    "Cobrança Cadastrada",
+    "INTEGRATION"
+  ],
+  "textObservations": [
+    {
+      "text": "Intenção de Pagamento salva",
+      "kind": "event_candidate",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "locationHint": "acima de Cobrança via Checkout",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto azul claro, claramente visível acima da caixa 'Cobrança via Checkout'"
+    },
+    {
+      "text": "Cliente Encontrado",
+      "kind": "event_candidate",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "locationHint": "acima de Cobrança via Checkout",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto azul claro, claramente visível acima da caixa 'Cobrança via Checkout'"
+    },
+    {
+      "text": "Pagamento Pendente",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima de Processamento de Pagamentos",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível acima da caixa 'Processamento de Pagamentos'"
+    },
+    {
+      "text": "Fatura Criada",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima de Cobrança via Checkout",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível acima da caixa 'Cobrança via Checkout'"
+    },
+    {
+      "text": "Cliente Não Encontrado",
+      "kind": "event_candidate",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "locationHint": "acima de Cadastro de Cliente",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto azul claro, claramente visível acima da caixa 'Cadastro de Cliente'"
+    },
+    {
+      "text": "Cliente Cadastrado",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima de Cadastro de Cliente",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível acima da caixa 'Cadastro de Cliente'"
+    },
+    {
+      "text": "Cobrança Cadastrada",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima de PSPs",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível acima da caixa 'PSPs'"
+    },
+    {
+      "text": "Cobrança via Checkout",
+      "kind": "touch_point",
+      "role": "unknown",
+      "colorHex": "unknown",
+      "confidence": 1,
+      "locationHint": "caixa laranja no fluxo principal",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto dentro da caixa operacional interna, claramente visível"
+    },
+    {
+      "text": "Processamento de Pagamentos",
+      "kind": "touch_point",
+      "role": "unknown",
+      "colorHex": "unknown",
+      "confidence": 1,
+      "locationHint": "caixa laranja no fluxo principal",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto dentro da caixa operacional interna, claramente visível"
+    },
+    {
+      "text": "Cadastro de Cliente",
+      "kind": "touch_point",
+      "role": "unknown",
+      "colorHex": "unknown",
+      "confidence": 1,
+      "locationHint": "caixa laranja no fluxo alternativo",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto dentro da caixa operacional interna, claramente visível"
+    },
+    {
+      "text": "Intenção de Pagamento salva",
+      "kind": "event_candidate",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "locationHint": "acima do caminho feliz",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto azul claro, claramente visível no caminho feliz"
+    },
+    {
+      "text": "Cliente Não Encontrado",
+      "kind": "event_candidate",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "locationHint": "acima do caminho alternativo",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto azul claro, claramente visível no caminho alternativo"
+    },
+    {
+      "text": "Cliente Cadastrado",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima do caminho alternativo",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho alternativo"
+    },
+    {
+      "text": "Pagamento Pendente",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima do caminho alternativo",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho alternativo"
+    },
+    {
+      "text": "Fatura Criada",
+      "kind": "event_candidate",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "locationHint": "acima do caminho alternativo",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho alternativo"
+    },
+    {
+      "text": "INTEGRATION",
+      "kind": "structural",
+      "role": "unknown",
+      "colorHex": "unknown",
+      "confidence": 1,
+      "locationHint": "à esquerda do fluxo principal",
+      "ocrAlternatives": [],
+      "ambiguousCharacters": [],
+      "needsOcrReview": false,
+      "reasoning": "Texto dentro de uma área estrutural, claramente visível"
+    }
+  ],
+  "eventVisualSemantics": [
+    {
+      "eventTitle": "Intenção de Pagamento salva",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "reasoning": "Texto azul claro, claramente visível no caminho feliz"
+    },
+    {
+      "eventTitle": "Cliente Encontrado",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "reasoning": "Texto azul claro, claramente visível no caminho feliz"
+    },
+    {
+      "eventTitle": "Pagamento Pendente",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho feliz e alternativo"
+    },
+    {
+      "eventTitle": "Fatura Criada",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho feliz e alternativo"
+    },
+    {
+      "eventTitle": "Cliente Não Encontrado",
+      "role": "supporting",
+      "colorHex": "#305CDE",
+      "confidence": 1,
+      "reasoning": "Texto azul claro, claramente visível no caminho alternativo"
+    },
+    {
+      "eventTitle": "Cliente Cadastrado",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "reasoning": "Texto vermelho claro, claramente visível no caminho alternativo"
+    },
+    {
+      "eventTitle": "Cobrança Cadastrada",
+      "role": "protagonist",
+      "colorHex": "#FF0000",
+      "confidence": 1,
+      "reasoning": "Texto vermelho claro, claramente visível no PSPs"
+    }
+  ],
+  "touchPointEventCorrelations": [
+    {
+      "touchPointTitle": "Cobrança via Checkout",
+      "eventsObservedAroundTouchPoint": [
+        "Fatura Criada",
+        "Intenção de Pagamento salva",
+        "Cliente Encontrado",
+        "Cliente Não Encontrado"
+      ],
+      "confidence": 1,
+      "reasoning": "Caixa laranja no fluxo principal com eventos próximos: Intenção de Pagamento salva (azul) e Cliente Encontrado (azul) antes, Fatura Criada (vermelho) e Pagamento Pendente (vermelho) depois"
+    },
+    {
+      "touchPointTitle": "Processamento de Pagamentos",
+      "eventsObservedAroundTouchPoint": [
+        "Pagamento Pendente"
+      ],
+      "confidence": 1,
+      "reasoning": "Caixa laranja no fluxo principal com evento próximo: Pagamento Pendente (vermelho) depois"
+    },
+    {
+      "touchPointTitle": "Cadastro de Cliente",
+      "eventsObservedAroundTouchPoint": [
+        "Cliente Cadastrado"
+      ],
+      "confidence": 1,
+      "reasoning": "Caixa laranja no fluxo alternativo com eventos próximos: Cliente Não Encontrado (azul) antes, Cliente Cadastrado (vermelho) depois"
+    }
+  ],
+  "commandsDetected": [
+    {
+      "touchPointTitle": "Cobrança via Checkout",
+      "commandName": "process_checkout",
+      "confidence": 1,
+      "reasoning": "Derivado da label 'Cobrança via Checkout' - ação de processar checkout"
+    },
+    {
+      "touchPointTitle": "Processamento de Pagamentos",
+      "commandName": "process_payments",
+      "confidence": 1,
+      "reasoning": "Derivado da label 'Processamento de Pagamentos' - ação de processar pagamentos"
+    },
+    {
+      "touchPointTitle": "Cadastro de Cliente",
+      "commandName": "register_client",
+      "confidence": 1,
+      "reasoning": "Derivado da label 'Cadastro de Cliente' - ação de registrar cliente"
+    }
+  ],
+  "flowsDetected": [
+    {
+      "name": "Caminho Feliz",
+      "flowType": "main",
+      "arrowStyle": "solid",
+      "orderedEventTitles": [
+        "Intenção de Pagamento salva",
+        "Cliente Encontrado",
+        "Fatura Criada",
+        "Pagamento Pendente"
+      ],
+      "touchPoints": [
+        "Cobrança via Checkout",
+        "Processamento de Pagamentos"
+      ],
+      "confidence": 1,
+      "reasoning": "Fluxo principal com setas sólidas, começando com Intenção de Pagamento salva e Cliente Encontrado (azul), seguindo para Fatura Criada e Pagamento Pendente (vermelho)"
+    },
+    {
+      "name": "Caminho Alternativo",
+      "flowType": "alternate",
+      "arrowStyle": "dashed",
+      "orderedEventTitles": [
+        "Intenção de Pagamento salva",
+        "Cliente Não Encontrado",
+        "Cliente Cadastrado",
+        "Pagamento Pendente",
+        "Fatura Criada"
+      ],
+      "touchPoints": [
+        "Cadastro de Cliente"
+      ],
+      "confidence": 1,
+      "reasoning": "Fluxo alternativo com setas tracejadas, começando com Intenção de Pagamento salva (azul), seguindo para Cliente Não Encontrado (azul), Cliente Cadastrado (vermelho), Pagamento Pendente (vermelho) e Fatura Criada (vermelho)"
+    }
+  ],
+  "actorsDetected": [],
+  "servicesDetected": [
+    "PSPs (Payment Service Providers)"
+  ],
+  "uncertainItems": [],
+  "assumptions": []
+}
