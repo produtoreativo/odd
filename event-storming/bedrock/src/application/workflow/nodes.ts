@@ -47,6 +47,7 @@ import { buildStepMetricUpdate } from './metrics.js';
 import { traceStep } from '../../infrastructure/langsmith/tracing.js';
 import { getLocale, t } from '../../shared/i18n.js';
 import { persistRawResponse, persistStageJson } from './artifacts.js';
+import { composeBusinessTransactionRoutes } from './transaction-routes.js';
 import {
   detectArrowGeometry,
   detectShapeGeometry,
@@ -1695,20 +1696,31 @@ function sanitizeImageObservation(
       roleFromColor(semantic.colorHex, semantic.role)
     ])
   );
-  const mergedFlowsForAssignment = [
+  const mergedFlowsForAssignment = uniqueFlows([
     ...(ocrPromptContext?.spatialComposition?.flowsDetected ?? []),
     ...observation.flowsDetected
-  ];
+  ]);
   const rawCorrelationsForAssignment = [
     ...(ocrPromptContext?.spatialComposition?.touchPointEventCorrelations ?? []),
     ...observation.touchPointEventCorrelations
   ];
-  const touchPointByEvent = shouldPreferSpatialCorrelationAssignment(mergedFlowsForAssignment)
+  const rawTouchPointByEvent = shouldPreferSpatialCorrelationAssignment(mergedFlowsForAssignment)
     ? mergeTouchPointAssignments(
       deriveTouchPointAssignmentFromCorrelations(rawCorrelationsForAssignment, touchPointsDetected, textsOutsideShapes),
       deriveTouchPointAssignment(mergedFlowsForAssignment, roleByEvent, touchPointsDetected)
     )
     : deriveTouchPointAssignment(mergedFlowsForAssignment, roleByEvent, touchPointsDetected);
+  const transactionRoutes = composeBusinessTransactionRoutes(
+    mergedFlowsForAssignment,
+    rawTouchPointByEvent,
+    touchPointsDetected
+  );
+  const touchPointByEvent = shouldPreferSpatialCorrelationAssignment(transactionRoutes)
+    ? mergeTouchPointAssignments(
+      deriveTouchPointAssignmentFromCorrelations(rawCorrelationsForAssignment, touchPointsDetected, textsOutsideShapes),
+      deriveTouchPointAssignment(transactionRoutes, roleByEvent, touchPointsDetected)
+    )
+    : deriveTouchPointAssignment(transactionRoutes, roleByEvent, touchPointsDetected);
   const touchPointReassignments = collectTouchPointReassignments(
     observation.touchPointEventCorrelations,
     touchPointByEvent
@@ -1751,10 +1763,7 @@ function sanitizeImageObservation(
       touchPointsDetected,
       textsOutsideShapes
     ),
-    flowsDetected: uniqueFlows([
-      ...(ocrPromptContext?.spatialComposition?.flowsDetected ?? []),
-      ...observation.flowsDetected
-    ]
+    flowsDetected: uniqueFlows(transactionRoutes
       .map((flow) => ({
         ...flow,
         name: flow.name.trim(),
@@ -1982,7 +1991,7 @@ function deriveTouchPointAssignment(
           touchPointsWithProtagonist.add(owner);
         }
 
-        const pendingOwner = lastObservedTouchPoint || owner;
+        const pendingOwner = owner;
         for (const pendingEvent of pendingEvents) {
           if (!assignment.has(pendingEvent)) {
             assignment.set(pendingEvent, pendingOwner);
