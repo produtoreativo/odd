@@ -1647,6 +1647,7 @@ function buildDeterministicImageObservation(ocrPromptContext: OcrPromptContext |
     textObservations: ocrPromptContext?.textObservations ?? [],
     eventVisualSemantics: ocrPromptContext?.eventVisualSemantics ?? [],
     touchPointEventCorrelations: spatial?.touchPointEventCorrelations ?? [],
+    commandsDetected: [],
     flowsDetected: spatial?.flowsDetected ?? [],
     actorsDetected: [],
     servicesDetected: [],
@@ -1657,6 +1658,93 @@ function buildDeterministicImageObservation(ocrPromptContext: OcrPromptContext |
       ...(spatial?.assumptions ?? [])
     ])
   };
+}
+
+const COMMAND_OBJECT_STOPWORDS = new Set([
+  'de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'os', 'as', 'no', 'na', 'em', 'para', 'com', 'via'
+]);
+
+const COMMAND_TOKEN_PHRASES: ReadonlyArray<readonly [string, string, string]> = [
+  ['sign', 'in', 'signin'],
+  ['sign', 'up', 'signup']
+];
+
+const COMMAND_OBJECT_GLOSSARY: Readonly<Record<string, string>> = {
+  curso: 'course', cursos: 'courses', aluno: 'student', alunos: 'students',
+  pagamento: 'payment', pagamentos: 'payments', usuario: 'user', usuarios: 'users',
+  cliente: 'client', clientes: 'clients', pagina: 'page', tela: 'screen',
+  produto: 'product', produtos: 'products', cobranca: 'charge', pedido: 'order',
+  pedidos: 'orders', carrinho: 'cart', compras: 'purchases', conta: 'account',
+  perfil: 'profile', credencial: 'credential', certificacao: 'certification',
+  documento: 'document', documentos: 'documents', avaliacao: 'assessment',
+  cadastrada: 'registered', cadastrado: 'registered'
+};
+
+const COMMAND_VERB_RULES: ReadonlyArray<{ verb: string; triggers: readonly string[] }> = [
+  { verb: 'process', triggers: ['processamento', 'cobranca', 'pagamento', 'pagamentos', 'pagar'] },
+  { verb: 'register', triggers: ['cadastro', 'cadastrar', 'registro', 'registrar', 'inscricao', 'inscrever', 'criacao', 'signup'] },
+  { verb: 'authenticate', triggers: ['signin', 'login', 'autenticar', 'entrar', 'acesso'] },
+  { verb: 'confirm', triggers: ['confirmacao', 'confirmar', 'validacao', 'validar', 'verificar'] },
+  { verb: 'retry', triggers: ['retentativa', 'retentar'] },
+  { verb: 'submit', triggers: ['enviar', 'envio', 'submeter', 'submissao', 'anexar', 'anexos', 'anexo'] },
+  { verb: 'search', triggers: ['buscar', 'busca', 'pesquisar', 'pesquisa', 'consultar', 'consulta', 'listagem', 'lista'] },
+  { verb: 'select', triggers: ['selecionar', 'selecao', 'escolher'] },
+  { verb: 'view', triggers: ['pagina', 'tela', 'visualizar', 'ver', 'detalhe'] }
+];
+
+const DEFAULT_COMMAND_VERB = 'view';
+
+function commandTokens(touchPointTitle: string): string[] {
+  const tokens = normalizeTouchPointLabel(touchPointTitle)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const collapsed: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const phrase = COMMAND_TOKEN_PHRASES.find((candidate) => candidate[0] === tokens[index] && candidate[1] === tokens[index + 1]);
+    if (phrase) {
+      collapsed.push(phrase[2]);
+      index += 1;
+    } else {
+      collapsed.push(tokens[index]);
+    }
+  }
+  return collapsed;
+}
+
+function deriveCommandName(touchPointTitle: string): { commandName: string; verb: string } {
+  const tokens = commandTokens(touchPointTitle);
+  let verb = DEFAULT_COMMAND_VERB;
+  let matchedToken: string | null = null;
+  for (const rule of COMMAND_VERB_RULES) {
+    const trigger = tokens.find((token) => rule.triggers.includes(token));
+    if (trigger) {
+      verb = rule.verb;
+      matchedToken = trigger;
+      break;
+    }
+  }
+  const object = tokens
+    .filter((token) => !COMMAND_OBJECT_STOPWORDS.has(token) && token !== matchedToken)
+    .map((token) => COMMAND_OBJECT_GLOSSARY[token] ?? token)
+    .join('_');
+  return { commandName: object ? `${verb}_${object}` : verb, verb };
+}
+
+function deriveCommandsFromTouchPoints(touchPointsDetected: string[]): ImageObservation['commandsDetected'] {
+  return touchPointsDetected.map((touchPointTitle) => {
+    const { commandName, verb } = deriveCommandName(touchPointTitle);
+    return {
+      touchPointTitle,
+      commandName,
+      confidence: 1,
+      reasoning: t('command.derivedFromTouchPoint', { command: commandName, touchPoint: touchPointTitle, verb })
+    };
+  });
 }
 
 function sanitizeImageObservation(
@@ -1730,6 +1818,7 @@ function sanitizeImageObservation(
     ...observation,
     areasDetected,
     touchPointsDetected,
+    commandsDetected: deriveCommandsFromTouchPoints(touchPointsDetected),
     textsOutsideShapes,
     textObservations: mergeTextObservations(ocrPromptContext?.textObservations ?? [], observation.textObservations)
       .map((textObservation) => normalizeTextObservationKind(
