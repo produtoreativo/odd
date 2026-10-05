@@ -30,6 +30,10 @@ This is not a review activity at the end of development. It is an activity that 
 
 The entire team needs to follow the Service Blueprint mapping to extract the architecture necessary for each moment of action. The ProdOps Engineer is the one who ensures the conversation includes weaknesses, not just possibilities.
 
+![Reliability Plan divided into three tracks over the weeks: Delivery, Observability, and Operation](../../images/cap14-plano-cadeia.png)
+
+*The Reliability Plan organized into parallel tracks over time. Week 1: Delivery begins with IaC for non-production environments; Observability instruments Datadog and configures endpoint monitoring; Operation configures On-call and integrates Datadog with Opsgenie. Week 2: Observability creates the Reliability Dashboard. Each track has an explicit owner and concrete deliverable. This is not a project plan — it is a reliability plan derived from domain understanding. Source: slide 64 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 ## Group Buying: The Plan in Action
 
 In Group Buying, the Reliability Plan can reveal:

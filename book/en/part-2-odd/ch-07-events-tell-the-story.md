@@ -30,6 +30,10 @@ In Group Buying, the question is not just which screens exist. We ask what happe
 
 Group created. Group announced. Group indexed for searches. User joined the group. Cart created. Invoice generated. Order created. Deadline expired with insufficient quantity. Group closed with pending commercial approval. Product received.
 
+![Group Buying Domain Events flow: PIM → Catalog → Offer → Purchase Order → Order → Billed Order, with the Group Buying creation and indexing subflow](../../images/cap07-domain-events.png)
+
+*The diagram shows Group Buying Domain Events as a sequence of occurrences: the main journey goes from PIM to Billed Order, while the Group Buying subflow reveals the events of Eligible Product, Buying Group Created, Buying Group Indexed, and Product Found with Buying Group. Each orange box is an event, not an activity. Source: slide 71 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 Each of these events represents a change that matters to the business. Each can have direct consequences in other domains: the indexing event needs to propagate to the search engine, the closure event needs to notify the commercial team, the receipt event may need to update delivery metrics.
 
 Domain events also have precise names. In the Group Buying case, events like `group_buying.shopcart.buybox.added` with metadata `{group:created}` or `{group:adhesion}` reveal not just what happened, but in which context it happened. This semantic precision is what allows distinct systems to coordinate without excessive coupling.

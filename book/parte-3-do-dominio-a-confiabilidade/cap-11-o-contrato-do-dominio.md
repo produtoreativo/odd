@@ -34,6 +34,10 @@ Uma integração com o motor de busca não é apenas uma chamada de indexação.
 
 Uma integração com o time comercial não é apenas uma notificação. É um contrato que diz: quando um grupo é encerrado com pendência de aprovação, uma pessoa precisa ser informada em tempo de tomar uma decisão útil.
 
+![Alerta de contrato em produção: mensagem no Discord notificando que o número de grupos criados nos últimos 5 minutos caiu abaixo de 10](../images/cap11-contratos-negocio.png)
+
+*O alerta mostra um contrato de domínio em ação: "Nos últimos 5 minutos, o número de grupos criados caiu abaixo de 10. Verifique o funcionamento da jornada de compra coletiva." Isso não é um alerta técnico de infraestrutura — é um alerta de comportamento de negócio. Ele só pode existir se a jornada foi compreendida e o contrato foi explicitado: quantos grupos deveriam ser criados em cinco minutos é uma condição de domínio, não uma métrica de servidor. Fonte: slide 22 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 2".*
+
 ## O que este capítulo não é
 
 Este capítulo não é um catálogo de padrões de integração. ODD não prescreve uma tecnologia para todos os contratos.

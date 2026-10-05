@@ -30,6 +30,10 @@ PRE não é ODD continuado. Quando PRE começa, o domínio já foi suficientemen
 
 Isso tem implicações práticas. Durante PRE, os cenários de confiabilidade são escritos com precisão sobre comportamentos já acordados. O BDD estendido com `Emit / Observe / Expect / Alert` reflete acontecimentos do domínio que foram descobertos durante ODD, não hipóteses sobre o que o domínio pode ser.
 
+![Tabela de BDD enriquecido do Group Buying: colunas Touch Point, Domain Event, Bounded Context, Domain, Subdomain, Métrica Label, Metric Type e Tags](../images/cap17-bdd-enriquecido.png)
+
+*O BDD enriquecido conecta cada ponto de contato a seu Domain Event, Bounded Context, domínio e subdomínio, e em seguida a uma métrica com label semântica no formato `context.domain.sub.event`. No exemplo, "Grupo de Compra com falha de Status" gera a métrica `group_buying.available_group.status.failure` do tipo `count`, com tags para cada estado possível do grupo (created, adhesion, expired, pending\_approval, cancelled, completed). Isso é observabilidade derivada do domínio, não de uma ferramenta. Fonte: slide 77 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 Se PRE está descobrindo comportamentos fundamentais do domínio, algo no processo anterior não foi concluído. O Plano de Confiabilidade estava incompleto. O OBC não representava suficientemente o domínio. O compromisso foi assumido sobre incerteza não explicitada.
 
 ## A causalidade que precisa ser preservada

@@ -16,6 +16,10 @@ Como uma pessoa chega até o produto? Quais pontos de contato ela atravessa? Ond
 
 Jornada, Value Stream e Service Blueprint cumprem funções complementares nessa descoberta. Eles permitem relacionar intenção, fluxo, pontos de contato, serviços e peças sem começar pela implementação.
 
+![Service Blueprint de e-commerce mostrando Ecommerce Channel Team, Ecommerce Shopping Cart Team e Order Management Team e suas dependências de serviços](../images/cap06-service-blueprint.png)
+
+*A Service Blueprint organiza a jornada em camadas: as ações do cliente nos pontos de contato (Product Page, Buy Now, Shopping Cart View, View Order), os times responsáveis por cada parte (Channel Team, Shopping Cart Team, Order Management Team), e os serviços que sustentam cada etapa (Catalog, Pricing, Store, Shipping Costs, Payments). A marcação de falha em `getDiscountRulesInCart 1.2` mostra exatamente o tipo de dependência invisível que uma blueprint bem feita torna visível antes do incidente. Fonte: slide 21 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 O Product Deck organiza o que foi descoberto a partir das quatro dimensões do produto: Cliente, Empresa, Time e Tecnologia. Sua função não é produzir um relatório. É ser um índice para tomadas de decisão rápidas, integrando as visões que costumam existir separadas — a visão do negócio, a visão da operação, a visão do time e a visão técnica.
 
 ## Group Buying: a jornada que revela o domínio

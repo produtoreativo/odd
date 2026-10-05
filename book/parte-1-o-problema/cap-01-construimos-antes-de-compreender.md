@@ -42,6 +42,10 @@ A pergunta que orienta este livro é anterior à escolha de qualquer tecnologia:
 
 Essa pergunta muda a natureza do trabalho de descoberta. Ela não existe para atrasar a entrega. Existe para que a entrega aconteça sobre um terreno suficientemente conhecido.
 
+![Ciclo ProdOps: Pre-work alimenta o Plano de Confiabilidade que retroalimenta Release, Planning e Refinamento](../images/cap01-prodops-ciclo.png)
+
+*O ciclo ProdOps mostra onde o trabalho de compreensão se encaixa: antes do release, não depois. O Plano de Confiabilidade, produzido durante a fase de Pre-work e Premortem, alimenta diretamente o ciclo de Release, Planning e Refinamento. Fonte: slide 8 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 ---
 
 *Compreender não é atrasar a entrega. É diminuir a quantidade de execução feita sobre uma realidade que ainda não foi entendida.*

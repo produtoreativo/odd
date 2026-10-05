@@ -6,6 +6,10 @@ Quanto mais difícil é reconstruir a história de uma decisão ou explicar o es
 
 O conceito não precisa ser tratado como uma fórmula. É uma condição operacional. E suas consequências são práticas.
 
+![Loop bidirecional entre Entropia da Informação e Intercambiabilidade](../images/cap05-estrategia-prodops.png)
+
+*A relação entre entropia e intercambiabilidade é cíclica: alta entropia reduz a capacidade de intercambiar partes do sistema de forma segura, e baixa intercambiabilidade mantém a organização presa a decisões que elevam ainda mais a entropia. Fonte: slide 67 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 ## Como a entropia se manifesta
 
 Quando a organização não consegue enxergar bem, ela tende a iniciar mais coisas. Cada parte do sistema cria sua própria interpretação do que está acontecendo. Equipes diferentes tomam decisões localmente corretas que, em conjunto, produzem um comportamento que ninguém havia antecipado.

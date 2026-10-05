@@ -34,6 +34,10 @@ An integration with the search engine is not just an indexing call. It is a cont
 
 An integration with the commercial team is not just a notification. It is a contract that says: when a group closes with pending approval, a person needs to be informed in time to make a useful decision.
 
+![Domain contract in production: Discord alert notifying that the number of groups created in the last 5 minutes fell below 10](../../images/cap11-contratos-negocio.png)
+
+*The alert shows a domain contract in action: "In the last 5 minutes, the number of groups created fell below 10. Check the functioning of the group purchase journey." This is not a technical infrastructure alert — it is a business behavior alert. It can only exist if the journey was understood and the contract was made explicit: how many groups should be created in five minutes is a domain condition, not a server metric. Source: slide 22 of the presentation "ProdOps — Domain Modeling with Reliability, Part 2".*
+
 ## What This Chapter Is Not
 
 This chapter is not a catalog of integration patterns. ODD does not prescribe a technology for all contracts.

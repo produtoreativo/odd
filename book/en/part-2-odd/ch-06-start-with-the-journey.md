@@ -16,6 +16,10 @@ How does a person arrive at the product? Which touchpoints do they traverse? Whe
 
 Journey, Value Stream, and Service Blueprint serve complementary functions in this discovery. They allow connecting intent, flow, touchpoints, services, and parts without starting from implementation.
 
+![Service Blueprint showing Ecommerce Channel Team, Ecommerce Shopping Cart Team, and Order Management Team with their service dependencies](../../images/cap06-service-blueprint.png)
+
+*The Service Blueprint organizes the journey into layers: customer actions at touchpoints (Product Page, Buy Now, Shopping Cart View, View Order), the teams responsible for each part (Channel Team, Shopping Cart Team, Order Management Team), and the services sustaining each stage (Catalog, Pricing, Store, Shipping Costs, Payments). The failure mark at `getDiscountRulesInCart 1.2` shows exactly the kind of invisible dependency that a well-done blueprint makes visible before the incident. Source: slide 21 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 The Product Deck organizes what was discovered from the four dimensions of the product: Customer, Company, Team, and Technology. Its function is not to produce a report. It is to be an index for fast decision-making, integrating the views that usually exist separately — the business view, the operations view, the team view, and the technical view.
 
 ## Group Buying: The Journey That Reveals the Domain

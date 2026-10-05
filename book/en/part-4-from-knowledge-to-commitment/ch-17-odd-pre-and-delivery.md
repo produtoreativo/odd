@@ -30,6 +30,10 @@ PRE is not ODD continued. When PRE begins, the domain has already been sufficien
 
 This has practical implications. During PRE, reliability scenarios are written with precision about already agreed-upon behaviors. The BDD extended with `Emit / Observe / Expect / Alert` reflects domain events that were discovered during ODD, not hypotheses about what the domain might be.
 
+![Enriched BDD table for Group Buying: columns Touch Point, Domain Event, Bounded Context, Domain, Subdomain, Metric Label, Metric Type, and Tags](../../images/cap17-bdd-enriquecido.png)
+
+*The enriched BDD connects each touchpoint to its Domain Event, Bounded Context, domain and subdomain, and then to a metric with a semantic label in the format `context.domain.sub.event`. In the example, "Grupo de Compra com falha de Status" generates the metric `group_buying.available_group.status.failure` of type `count`, with tags for each possible group state (created, adhesion, expired, pending\_approval, cancelled, completed). This is observability derived from the domain, not from a tool. Source: slide 77 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 If PRE is discovering fundamental domain behaviors, something in the previous process was not completed. The Reliability Plan was incomplete. The OBC did not sufficiently represent the domain. The commitment was assumed on unexplained uncertainty.
 
 ## The Causality That Needs to Be Preserved

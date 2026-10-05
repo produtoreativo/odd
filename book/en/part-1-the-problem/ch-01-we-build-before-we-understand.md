@@ -42,6 +42,10 @@ The question that guides this book comes before the choice of any technology: be
 
 This question changes the nature of discovery work. It does not exist to delay delivery. It exists so that delivery happens on sufficiently known ground.
 
+![ProdOps cycle: Pre-work feeds the Reliability Plan which feeds back into Release, Planning and Refinement](../../images/cap01-prodops-ciclo.png)
+
+*The ProdOps cycle shows where comprehension work fits: before the release, not after. The Reliability Plan, produced during the Pre-work and Premortem phase, feeds directly into the Release, Planning, and Refinement cycle. Source: slide 8 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 ---
 
 *Understanding does not delay delivery. It reduces the amount of execution done over a reality that has not yet been understood.*

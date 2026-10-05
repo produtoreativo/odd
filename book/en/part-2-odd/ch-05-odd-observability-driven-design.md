@@ -40,6 +40,14 @@ This distinction protects ODD against two opposite deviations. The first is turn
 
 ODD comes before both. It seeks to produce enough understanding so that architecture, delivery, and operations are informed decisions, not attempts to compensate for what was not understood.
 
+## ODD's Conceptual Structure
+
+The starting point is always the business. From there, ODD follows three steps toward technology, integrating everything through the domain's ubiquitous language.
+
+![ODD conceptual structure: Starts with Business, three steps, integrates by Ubiquitous Language, dives into Technology](../../images/cap05-estrutura-conceitual.png)
+
+*The three structural steps of ODD: (1) establish Domain Events from the view of protagonist entities in a Value Stream; (2) find the Bounded Contexts to identify the teams and Domain Contracts; (3) identify the persistence model and transactional mutation of the entities. The cycle integrates by Ubiquitous Language and dives into Technology only after the domain is sufficiently understood. Source: slide 19 of the presentation "ProdOps — Domain Modeling with Reliability, Part 2".*
+
 ## The Four Movements
 
 ODD organizes itself in four sequential movements.

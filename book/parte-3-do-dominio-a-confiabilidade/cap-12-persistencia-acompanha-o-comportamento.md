@@ -32,6 +32,10 @@ O **Write Model** é o núcleo transacional — entidades ricas em comportamento
 
 O **Read Model** é a projeção otimizada para consulta — estruturas desnormalizadas, derivadas do modelo de escrita, eventualmente consistentes. Ele existe para servir leitura com a performance necessária, sem comprometer a integridade do domínio.
 
+![Exemplo de Write Model: estrutura JSON de um pedido com pedidoId, nomeCliente, total, status PAGO e dataCriacao](../images/cap12-write-read-model.png)
+
+*O exemplo mostra um Write Model de pedido: `pedidoId`, `nomeCliente`, `total`, `status: "PAGO"` e `dataCriacao`. Esta é a estrutura transacional — rica em semântica de negócio, com consistência garantida. O Read Model derivado desse pedido seria uma projeção desnormalizada, eventualmente consistente, otimizada para o canal de consulta (dashboard, relatório, busca). Fonte: slide 4 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 2".*
+
 Essa separação não é apenas uma decisão técnica. É uma consequência direta de reconhecer que escrever e ler têm naturezas diferentes, frequências diferentes e requisitos diferentes.
 
 ## Group Buying: persistência como decisão de domínio

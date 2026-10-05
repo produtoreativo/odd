@@ -10,6 +10,10 @@ Quando essa diferença não é explicitada, os sistemas começam a compartilhar 
 
 Bounded Context, conceito central do Domain-Driven Design, oferece uma forma de estabelecer fronteiras semânticas. Dentro de um Bounded Context, um modelo de domínio possui significado, regras e consistência próprios. Fora dele, o mesmo termo pode significar outra coisa.
 
+![Bounded Context clássico: Sales Context e Support Context compartilham as entidades Customer e Product com significados distintos em cada lado da fronteira](../images/cap09-bounded-context.png)
+
+*O exemplo clássico mostra como Customer e Product existem tanto no Sales Context (com Opportunity, Pipeline, Territory, Sales Person) quanto no Support Context (com Ticket, Defect, Product Version). São entidades com o mesmo nome e identificador, mas com comportamentos, regras e responsáveis completamente distintos em cada contexto. A linha de separação entre os contextos é a fronteira semântica. Fonte: slide 19 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 ODD utiliza esse fundamento porque confiabilidade também depende de saber quem possui uma verdade e onde ela pode ser alterada.
 
 A fronteira não deve ser escolhida apenas porque uma aplicação parece grande ou porque um serviço parece conveniente. Ela deve surgir da compreensão do domínio, da responsabilidade e dos contratos necessários para que a jornada continue funcionando.
@@ -31,6 +35,10 @@ No Group Buying, diferentes partes da jornada possuem responsabilidades claramen
 O domínio de **catálogo** responde pela existência e pelos atributos do produto. O domínio de **oferta** responde pela elegibilidade e pelas condições da compra em grupo. O domínio de **grupo** responde pelo ciclo de vida do grupo — sua criação, adesões, expiração e encerramento. O domínio de **pedido** responde pela transação financeira. O domínio de **busca** responde pela indexação e pela descoberta.
 
 Cada um desses domínios possui sua própria linguagem, suas próprias regras e seus próprios protagonistas. Quando uma mudança no grupo precisa se propagar para o motor de busca — para que o grupo indexado reflita o estado atual — existe uma dependência entre domínios que precisa ser gerenciada como um contrato, não como uma implementação improvisada.
+
+![Context Map do Group Buying mostrando os Bounded Contexts: Catalog, Shop Cart, Group Buying e Order Mgmt, com as entidades distribuídas por cada contexto](../images/cap09-context-mapping.png)
+
+*O Context Map do Group Buying torna visível a divisão de responsabilidades entre contextos: Catalog (azul, esquerda) cuida do produto enriquecido e da oferta; Shop Cart (vermelho) controla o fluxo do carrinho e a criação de pedidos; Group Buying (centro branco) gerencia o ciclo de vida do grupo, a indexação e o encerramento; Order Mgmt (verde, direita) cuida do pedido e do faturamento. Cada contexto tem protagonistas próprios e os contratos entre eles são dependências explícitas. Fonte: slide 74 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
 
 ## Especialistas de domínio como guardiões do significado
 

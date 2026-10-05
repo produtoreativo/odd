@@ -28,6 +28,10 @@ O **carrinho** é protagonista de um ciclo mais curto e mais volátil. Ele exist
 
 Por contraste, o **produto** é principalmente coadjuvante nessa jornada. Ele é referenciado, consultado e exibido, mas raramente muda como resultado de uma compra em grupo específica. O **catálogo** e a **oferta** também são coadjuvantes — importantes para que a jornada comece, mas não alterados pelo processo em si.
 
+![Mapa de protagonistas e coadjuvantes ao longo da Value Stream do Group Buying, mostrando Produto, Cupom, Oferta, Cliente, Fatura e Pedido com seus papéis em cada etapa](../images/cap08-protagonistas-coadjuvantes.png)
+
+*O diagrama mapeia cada entidade ao longo da Value Stream completa (PIM → Catálogo → Oferta Vitrine → Ordem de Compra → Pedido → Pedido Produto Faturado). As barras horizontais mostram em quais etapas cada entidade é protagonista (linha sólida mais intensa) ou coadjuvante (linha tracejada). Produto atravessa toda a jornada como coadjuvante; Pedido entra apenas nas etapas finais, mas como protagonista absoluto. Fonte: slide 28 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 ## O protagonismo depende do ponto de observação
 
 Uma nuance importante: o protagonismo não é uma propriedade absoluta de uma entidade. É relativa ao Value Stream sendo observado.

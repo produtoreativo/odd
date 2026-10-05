@@ -20,6 +20,10 @@ Cada um desses pontos é uma preocupação de domínio antes de ser uma preocupa
 
 Uma distinção presente no material de referência é relevante aqui: observabilidade transacional e observabilidade analítica não precisam ser tratadas com a mesma ferramenta nem no mesmo plano.
 
+![Múltiplas frentes de observabilidade: Domain Ecommerce, Domain Search Engine, Domain Payments e canais analíticos de Marketing](../images/cap04-frentes-observabilidade.png)
+
+*O diagrama ilustra as múltiplas frentes de observabilidade em um produto de e-commerce real: o usuário inicia na tela de checkout, a jornada atravessa Domain Ecommerce (Webshop API, Magento, Elasticsearch, MySQL), Domain Search Engine (search-api) e Domain Payments (Stark Bank), enquanto o canal analítico de Marketing usa OneSignal e Mixpanel. Dev/Ops monitora com Sentry e Datadog. Cada frente tem sua própria natureza de observação. Fonte: slide 2 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 2".*
+
 O plano transacional está concentrado nas operações imediatas do sistema. Seu objetivo é facilitar a resposta direta e rápida. Quando um grupo é encerrado com status de erro crítico, o time precisa ser acionado imediatamente.
 
 O plano analítico apoia decisões de médio e longo prazo. Taxas de conversão, padrões de abandono, comportamento de formação de grupos ao longo do tempo — essas informações são úteis para evolução do produto, mas não precisam estar no mesmo pipeline que os alertas operacionais.

@@ -20,6 +20,10 @@ Each of those points is a domain concern before it is a technical concern.
 
 A distinction present in the reference material is relevant here: transactional observability and analytical observability do not need to be treated with the same tool or in the same plan.
 
+![Multiple observability fronts: Domain Ecommerce, Domain Search Engine, Domain Payments, and Marketing analytics channels](../../images/cap04-frentes-observabilidade.png)
+
+*The diagram illustrates the multiple observability fronts in a real e-commerce product: the user starts at the checkout screen, the journey traverses Domain Ecommerce (Webshop API, Magento, Elasticsearch, MySQL), Domain Search Engine (search-api), and Domain Payments (Stark Bank), while the Marketing analytics channel uses OneSignal and Mixpanel. Dev/Ops monitors with Sentry and Datadog. Each front has its own nature of observation. Source: slide 2 of the presentation "ProdOps — Domain Modeling with Reliability, Part 2".*
+
 The transactional plan is concentrated on the system's immediate operations. Its goal is to facilitate direct and fast response. When a group is closed with a critical error status, the team needs to be alerted immediately.
 
 The analytical plan supports medium and long-term decisions. Conversion rates, abandonment patterns, group formation behavior over time — this information is useful for product evolution, but does not need to be in the same pipeline as operational alerts.

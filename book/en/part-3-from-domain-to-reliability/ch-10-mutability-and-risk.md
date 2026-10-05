@@ -10,6 +10,10 @@ The reference material organizes entities into four groups that serve as orienta
 
 **Volatile Entities** exhibit very high mutability. The shopping cart is the canonical example. It changes with every buyer interaction — items are added, removed, quantities are altered, the session can expire. The associated risk lies in behavior, experience, and conversion. A failure in a volatile entity tends to appear immediately to the user and directly impact the journey completion rate.
 
+![Volatile Entity in Group Buying: the Cart as central entity, with events group_buying.shopcart.buybox.added {group:created} and {group:adhesion} flowing to the Webshop API](../../images/cap10-entidades-volateis.png)
+
+*The diagram shows the Cart as a volatile entity in the Group Buying context. Two flows arrive at the Shop Cart — group creation and a new buyer joining — and both fire the same domain event (`group_buying.shopcart.buybox.added`) with distinct metadata (`{group:created}` and `{group:adhesion}`). The Cart is resolved by the Webshop API (which integrates Search, ShopCart, and Group) and persists via Magento/MySQL. Source: slide 9 of the presentation "ProdOps — Domain Modeling with Reliability, Part 2".*
+
 **Dynamic Entities** exhibit high mutability with low tolerance for deviation. Inventory is the material's example. In Group Buying, the buying group and the order also fit here. They change with operational frequency and each change needs to be consistent — an invalid intermediate state can compromise the integrity of the entire journey. The risk lies in state consistency.
 
 **Semi-static Entities** change less frequently. A product may occupy this position. A product's attributes change — name, price, description, categories — but they do not change with every transaction. The risk lies in synchronization, versioning, and consistency. An outdated product change may not interrupt a purchase, but can produce incorrect displays or inconsistencies between channels.

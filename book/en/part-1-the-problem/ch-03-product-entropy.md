@@ -6,6 +6,10 @@ The harder it is to reconstruct the history of a decision or explain the state o
 
 The concept does not need to be treated as a formula. It is an operational condition. And its consequences are practical.
 
+![Bidirectional loop between Information Entropy and Interchangeability](../../images/cap05-estrategia-prodops.png)
+
+*The relationship between entropy and interchangeability is cyclical: high entropy reduces the organization's capacity to interchange parts of the system safely, and low interchangeability keeps the organization locked to decisions that elevate entropy further. Source: slide 67 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 ## How Entropy Manifests
 
 When the organization cannot see clearly, it tends to start more things. Each part of the system creates its own interpretation of what is happening. Different teams make locally correct decisions that, taken together, produce behavior no one anticipated.

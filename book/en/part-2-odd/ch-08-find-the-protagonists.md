@@ -28,6 +28,10 @@ The **cart** is a protagonist of a shorter and more volatile cycle. It exists wh
 
 By contrast, the **product** is primarily a supporting character in this journey. It is referenced, consulted, and displayed, but rarely changes as a result of a specific group purchase. The **catalog** and the **offer** are also supporting characters — important for the journey to begin, but not altered by the process itself.
 
+![Map of protagonists and supporting characters across the Group Buying Value Stream, showing Product, Coupon, Offer, Customer, Invoice, and Order in their roles at each stage](../../images/cap08-protagonistas-coadjuvantes.png)
+
+*The diagram maps each entity across the full Value Stream (PIM → Catalog → Offer Showcase → Purchase Order → Order → Billed Order). The horizontal bars show at which stages each entity is a protagonist (more intense solid line) or a supporting character (dashed line). Product spans the entire journey as a supporting character; Order enters only in the final stages, but as an absolute protagonist. Source: slide 28 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 ## Protagonism Depends on the Point of Observation
 
 An important nuance: protagonism is not an absolute property of an entity. It is relative to the Value Stream being observed.

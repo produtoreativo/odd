@@ -12,6 +12,10 @@ Bounded Context, a central concept in Domain-Driven Design, offers a way to esta
 
 ODD uses this foundation because reliability also depends on knowing who owns a truth and where it can be changed.
 
+![Classic Bounded Context: Sales Context and Support Context sharing the Customer and Product entities with distinct meanings on each side of the boundary](../../images/cap09-bounded-context.png)
+
+*The classic example shows how Customer and Product exist in both the Sales Context (with Opportunity, Pipeline, Territory, Sales Person) and the Support Context (with Ticket, Defect, Product Version). They are entities with the same name and identifier, but with completely distinct behaviors, rules, and owners in each context. The dividing line between the contexts is the semantic boundary. Source: slide 19 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
+
 The boundary should not be chosen merely because an application seems large or because a service seems convenient. It should emerge from understanding the domain, the responsibility, and the contracts necessary for the journey to keep working.
 
 Without associated responsibility, a Bounded Context is just a box in a diagram.
@@ -31,6 +35,10 @@ In Group Buying, different parts of the journey have clearly distinct responsibi
 The **catalog** domain answers for the product's existence and attributes. The **offer** domain answers for eligibility and the conditions of the group purchase. The **group** domain answers for the group's lifecycle — its creation, joins, expiration, and closure. The **order** domain answers for the financial transaction. The **search** domain answers for indexing and discovery.
 
 Each of these domains has its own language, its own rules, and its own protagonists. When a change in the group needs to propagate to the search engine — so the indexed group reflects the current state — there is a dependency between domains that needs to be managed as a contract, not as an improvised implementation.
+
+![Group Buying Context Map showing the Bounded Contexts: Catalog, Shop Cart, Group Buying, and Order Mgmt, with entities distributed across each context](../../images/cap09-context-mapping.png)
+
+*The Group Buying Context Map makes visible the division of responsibilities between contexts: Catalog (blue, left) handles the enriched product and offer; Shop Cart (red) controls the cart flow and order creation; Group Buying (center white) manages the group lifecycle, indexing, and closure; Order Mgmt (green, right) handles the order and billing. Each context has its own protagonists and the contracts between them are explicit dependencies. Source: slide 74 of the presentation "ProdOps — Domain Modeling with Reliability, Part 1".*
 
 ## Domain Experts as Guardians of Meaning
 

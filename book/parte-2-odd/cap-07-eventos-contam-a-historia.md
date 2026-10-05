@@ -30,6 +30,10 @@ No Group Buying, a pergunta não é apenas quais telas existem. Perguntamos o qu
 
 Grupo criado. Grupo anunciado. Grupo indexado para buscas. Usuário aderiu ao grupo. Carrinho criado. Invoice gerada. Pedido criado. Prazo expirado com quantidade insuficiente. Grupo encerrado com pendência de aprovação. Produto recebido.
 
+![Fluxo de Domain Events do Group Buying: PIM → Catálogo → Oferta → Ordem de Compra → Pedido → Pedido Faturado, com subluxo de criação e indexação do Grupo de Compra](../images/cap07-domain-events.png)
+
+*O diagrama mostra os Domain Events do Group Buying como uma sequência de acontecimentos: a jornada principal vai de PIM ao Pedido Produto Faturado, enquanto o subluxo de Group Buying revela os eventos de Produto Elegível, Grupo de Compra Criado, Grupo de Compra Indexado e Produto Encontrado com Grupo de Compra. Cada caixa laranja é um evento, não uma atividade. Fonte: slide 71 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 Cada um desses eventos representa uma mudança que importa para o negócio. Cada um pode ter consequências diretas em outros domínios: o evento de indexação precisa se propagar para o motor de busca, o evento de encerramento precisa notificar o time comercial, o evento de recebimento pode precisar atualizar métricas de entrega.
 
 Os domain events também têm nomes precisos. No caso Group Buying, eventos como `group_buying.shopcart.buybox.added` com metadados `{group:created}` ou `{group:adhesion}` revelam não apenas o que aconteceu, mas em que contexto aconteceu. Essa precisão semântica é o que permite que sistemas distintos se coordenem sem acoplamento excessivo.

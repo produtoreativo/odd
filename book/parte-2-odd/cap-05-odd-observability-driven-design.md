@@ -40,6 +40,14 @@ Essa distinção protege ODD contra dois desvios opostos. O primeiro é transfor
 
 ODD está antes de ambos. Ele procura produzir entendimento suficiente para que arquitetura, entrega e operação sejam decisões informadas, não tentativas de compensar o que não foi compreendido.
 
+## A estrutura conceitual de ODD
+
+O ponto de partida é sempre o negócio. A partir daí, ODD percorre três etapas em direção à tecnologia, integrando tudo pela linguagem ubíqua do domínio.
+
+![Estrutura conceitual de ODD: Começa com Negócio, três etapas, integra por Linguagem Ubíqua, mergulha na Tecnologia](../images/cap05-estrutura-conceitual.png)
+
+*As três etapas estruturais do ODD: (1) estabelecer Domain Events a partir da visão de entidades protagonistas em uma Value Stream; (2) encontrar os Bounded Contexts para identificar os times e Domain Contracts; (3) identificar o modelo de persistência e mutação transacional das entidades. O ciclo integra por Linguagem Ubíqua e mergulha na Tecnologia apenas após o domínio estar suficientemente compreendido. Fonte: slide 19 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 2".*
+
 ## Os quatro movimentos
 
 ODD se organiza em quatro movimentos sequenciais.

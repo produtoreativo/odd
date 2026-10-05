@@ -34,6 +34,10 @@ The **Read Model** is the projection optimized for querying — denormalized str
 
 This separation is not just a technical decision. It is a direct consequence of recognizing that writing and reading have different natures, different frequencies, and different requirements.
 
+![Write Model example: JSON structure of an order with pedidoId, nomeCliente, total, status PAGO, and dataCriacao](../../images/cap12-write-read-model.png)
+
+*The example shows an order Write Model: `pedidoId`, `nomeCliente`, `total`, `status: "PAGO"`, and `dataCriacao`. This is the transactional structure — rich in business semantics, with guaranteed consistency. The Read Model derived from this order would be a denormalized, eventually consistent projection, optimized for the query channel (dashboard, report, search). Source: slide 4 of the presentation "ProdOps — Domain Modeling with Reliability, Part 2".*
+
 ## Group Buying: Persistence as a Domain Decision
 
 In Group Buying, if inventory cannot be treated as simple catalog information because it changes during the purchase process and that change needs to be immediately consistent, this determines how it should be persisted. It is not an abstract technical choice — it is a response to the discovered behavior.

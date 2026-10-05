@@ -30,6 +30,10 @@ Isso não é uma atividade de revisão ao final do desenvolvimento. É uma ativi
 
 O time inteiro precisa seguir o mapeamento da Service Blueprint para extrair a arquitetura necessária para cada momento de atuação. O Engenheiro ProdOps é quem garante que a conversa inclui fraquezas, não apenas possibilidades.
 
+![Plano de Confiabilidade dividido em três trilhas ao longo das semanas: Delivery, Observability e Operation](../images/cap14-plano-cadeia.png)
+
+*O Plano de Confiabilidade organizado em trilhas paralelas ao longo do tempo. Semana 1: Delivery inicia com IaC de ambiente não produtivo; Observability instrumenta o DataDog e configura monitoramento de endpoints; Operation configura On-call e integra DataDog com Opsgenie. Semana 2: Observability cria a Dashboard de Confiabilidade. Cada trilha tem responsável explícito e entrega concreta. Isso não é um plano de projeto — é um plano de confiabilidade derivado do entendimento do domínio. Fonte: slide 64 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 ## Group Buying: o plano em ação
 
 No Group Buying, o Plano de Confiabilidade pode revelar:

@@ -10,6 +10,10 @@ O material de referência organiza entidades em quatro grupos que servem como or
 
 **Entidades Voláteis** apresentam mutabilidade muito alta. O carrinho de compras é o exemplo canônico. Ele muda a cada interação do comprador — itens são adicionados, removidos, quantidades são alteradas, o sessão pode expirar. O risco associado está no comportamento, na experiência e na conversão. Uma falha em entidade volátil tende a aparecer imediatamente para o usuário e impactar diretamente a taxa de conclusão da jornada.
 
+![Entidade Volátil no Group Buying: o Cart como entidade central, com os eventos group_buying.shopcart.buybox.added {group:created} e {group:adhesion} fluindo para o Webshop API](../images/cap10-entidades-volateis.png)
+
+*O diagrama mostra o Cart como entidade volátil no contexto do Group Buying. Dois fluxos chegam ao Shop Cart — a criação de grupo e a adesão de novo comprador — e ambos disparam o mesmo domain event (`group_buying.shopcart.buybox.added`) com metadados distintos (`{group:created}` e `{group:adhesion}`). O Cart é resolvido pelo Webshop API (que integra Search, ShopCart e Group) e persiste via Magento/MySQL. Fonte: slide 9 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 2".*
+
 **Entidades Dinâmicas** apresentam mutabilidade alta com baixa tolerância ao desvio. Estoque é o exemplo do material. No Group Buying, o grupo de compra e o pedido também se encaixam aqui. Elas mudam com frequência operacional e cada mudança precisa ser consistente — um estado intermediário inválido pode comprometer a integridade de toda a jornada. O risco está na consistência de estado.
 
 **Entidades Semiestáticas** mudam com menor frequência. Produto pode ocupar essa posição. Os atributos de um produto mudam — nome, preço, descrição, categorias — mas não mudam a cada transação. O risco está em sincronização, versão e consistência. Uma mudança desatualizada de produto pode não interromper uma compra, mas pode produzir exibições incorretas ou inconsistências entre canais.

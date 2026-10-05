@@ -28,6 +28,10 @@ Isso cria uma linguagem comum. Todos os nós e arestas podem gerar incidentes �
 
 No Group Buying, a jornada atravessa múltiplos domínios. A Matriz de Confiabilidade torna visível o que cada dependência significa para a experiência.
 
+![Matriz de Confiabilidade cruzando aplicações (Ecommerce Platform, Payments Gateway, Search API, Notifier, Mainframe, Cloud Functions) com dependências de infraestrutura (AWS, Elasticsearch, Kafka, Debezium, Sendgrid, bancos de dados)](../images/cap13-matriz-confiabilidade.png)
+
+*A matriz mostra todas as aplicações do produto nas colunas e todas as dependências nas linhas. Cada interseção marcada com "Disponível" representa um KPI monitorável. A legenda de cores define três estados: Disponível (>99,98%), Degradado (>98% e <98,99%) e Indisponível (<98%). As linhas de infraestrutura (AWS API Gateway, RDS, Elasticsearch, Kafka, Debezium, DB2, Sendgrid, Stark Bank, Wirecard) são agrupadas por tipo de dependência: App Dependency, Service Dependency e External Dependency. Cada célula preenchida é um ponto de observação que precisa de responsável. Fonte: slide 37 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
+
 Não basta saber que o serviço de pagamentos está disponível. Precisamos saber o que sua indisponibilidade significa para a jornada de compra em grupo e quem precisa agir. Não basta saber que o estoque responde. Precisamos saber se os estados relevantes — quantidade reservada, quantidade disponível, quantidade comprometida pelo grupo — permanecem reconciliados entre os domínios que os consultam.
 
 A integração entre o domínio de grupo e o motor de busca é uma dependência com um contrato implícito — quando um grupo muda de estado, a indexação precisa refletir isso dentro de um tempo aceitável. A Matriz de Confiabilidade torna esse contrato explícito como um KPI: qual é a latência máxima tolerável entre um evento de mudança de grupo e a atualização do índice? Quando esse tempo é ultrapassado, quem precisa saber?
