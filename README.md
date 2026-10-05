@@ -1,337 +1,221 @@
-# odd
+# ODD — Observability Driven Design
 
-Repositório com dois projetos ativos:
+> **Antes de construir o produto, descubra o que precisa ser confiável.**
 
-- `event-storming`: transforma imagens de event storming em contexto estruturado
-- `obc-o11y`: transforma o contexto estruturado em plano de observabilidade, Terraform e aplicação nos providers
+---
 
-Hoje, o fluxo recomendado do repositório é:
+## O problema
 
-1. processar a imagem no `event-storming/bedrock`
-2. usar o `03-standardized-context.json` como entrada do `obc-o11y`
+Organizações frequentemente começam a construir antes de compreender o sistema que estão tentando modificar.
 
-## Estrutura
+Isso gera ambiguidade, decisões escondidas, dependências não compreendidas, WIP desnecessário, baixa confiança nas decisões, retrabalho, baixa capacidade de antecipar riscos e produtos difíceis de observar e operar.
 
-```txt
-event-storming/
-  bedrock/   # workflow multimodal com Amazon Bedrock
-  foss/      # variante local/alternativa
-obc-o11y/
-  src/
-  generated/
-  terraform/
-  terraform-dynatrace/
-  terraform-grafana/
+O resultado é previsível: times que entregam, mas não sabem o que estão entregando. Sistemas que funcionam, mas que ninguém consegue operar com segurança. Incidentes que revelam, tarde demais, dependências que ninguém havia mapeado.
+
+---
+
+## A tese
+
+> **ODD é uma abordagem para transformar uma intenção de produto em um domínio compreendido, observável e confiável antes que ela se torne um compromisso de engenharia.**
+
+ODD não é um substituto de DDD. DDD fornece fundamentos importantes — linguagem ubíqua, Bounded Contexts, modelagem estratégica. ODD reorganiza a preocupação em torno daquilo que precisa ser compreendido, observado, operado e protegido antes de assumir o compromisso de construir.
+
+A pergunta central de ODD é:
+
+> **O que precisamos compreender sobre o domínio para saber o que deverá ser observado, operado e protegido antes de assumir o compromisso de construir?**
+
+---
+
+## A posição de ODD
+
+ODD não é o processo inteiro de produto. Sua posição é:
+
+```
+Business Intent
+      ↓
+     ODD        ← domínio compreendido, observável e confiável
+      ↓
+     OBC        ← compromisso assumido
+      ↓
+     PRE        ← entrega preparada
+      ↓
+   Delivery     ← compromisso executado
+      ↓
+   Runtime      ← realidade confrontada
+      ↓
+   Outcome
 ```
 
-## Pré-requisitos
+ODD prepara o domínio. OBC representa o domínio suficientemente compreendido para permitir compromisso. PRE prepara a entrega. Runtime confronta o produto com a realidade.
 
-- Node.js 20+
-- npm 10+
-- Terraform 1.5+
-- credenciais AWS com acesso ao Bedrock, se for usar `event-storming/bedrock`
-- credenciais do provider de observabilidade que você quer aplicar no `obc-o11y`
+ODD não entrega código. ODD entrega **condições para decidir**.
 
-## Instalação
+---
 
-### event-storming/bedrock
+## Os quatro movimentos de ODD
 
-```bash
-cd event-storming/bedrock
-npm install
-npm run check
+### Movimento 1 — Enxergar
+
+Antes de modelar, enxergar.
+
+Qual trajetória do produto precisa ser compreendida? Quais são os touch points, os fluxos, as dimensões Cliente, Empresa, Time e Tecnologia? Onde está o Value Stream?
+
+Não se começa desenhando arquitetura.
+
+### Movimento 2 — Tornar o domínio explícito
+
+```
+Value Stream → Domain Events → Entidades protagonistas → Bounded Contexts → Times → Domain Contracts
 ```
 
-### obc-o11y
+O foco não é uma ferramenta. O foco é descobrir o que acontece, o que muda, quem protagoniza a mudança, onde existe fronteira semântica, onde existe responsabilidade e quais contratos precisam existir.
 
-```bash
-cd obc-o11y
-npm install
-npm run check
+### Movimento 3 — Descobrir onde o risco realmente está
+
+Não basta descobrir entidades. É preciso descobrir como elas mudam e qual é a consequência operacional dessa mudança.
+
+Quanto essa entidade muda, quanto o negócio tolera que ela esteja errada e o que acontece quando ela está errada?
+
+As categorias fundamentais são:
+
+- **Entidades voláteis** — mutabilidade altíssima; risco associado a comportamento, experiência e conversão
+- **Entidades dinâmicas** — mutabilidade alta com baixa tolerância ao desvio; risco associado à consistência do estado
+- **Entidades semiestáticas** — mudanças menos frequentes; risco associado a sincronização, versão e consistência
+- **Entidades massivamente imutáveis** — criadas em volume e praticamente não modificadas; estratégia operacional favorece leitura, cache e projeções
+
+### Movimento 4 — Transformar o domínio em Plano de Confiabilidade
+
+O resultado de ODD não é simplesmente um diagrama. É um Plano de Confiabilidade.
+
+```
+ODD
+ │
+ ├── Product Deck
+ ├── Value Stream
+ ├── Domain Events
+ ├── Protagonistas
+ ├── Bounded Contexts
+ ├── Contratos
+ ├── Mutabilidade
+ ├── Dependências
+ └── Matriz de Confiabilidade
+              ↓
+       Plano de Confiabilidade
+              ↓
+             OBC
 ```
 
-## Ambiente
+---
 
-### event-storming/bedrock
+## Estrutura do livro
 
-Arquivo: `event-storming/bedrock/.env`
+### Parte I — O Problema
 
-`LANGSMITH_API_KEY` é opcional. Sem essa variável, o workflow continua funcionando, apenas sem tracing no LangSmith.
+| Capítulo | Argumento |
+|----------|-----------|
+| 1 | Construímos antes de compreender |
+| 2 | O domínio existe antes do software |
+| 3 | A entropia do produto |
+| 4 | Observabilidade começa antes da produção |
 
-Variáveis mínimas:
+### Parte II — ODD
 
-```dotenv
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_SESSION_TOKEN=... # opcional
-AWS_REGION=us-east-1
+| Capítulo | Argumento |
+|----------|-----------|
+| 5 | ODD: Observability Driven Design |
+| 6 | Comece pela jornada |
+| 7 | Eventos contam a história |
+| 8 | Encontre os protagonistas |
+| 9 | Onde termina um domínio? |
 
-BEDROCK_REQUEST_TIMEOUT_MS=3600000
+### Parte III — Do Domínio à Confiabilidade
 
-EVENT_STORMING_DEFAULT_MODEL=amazon.nova-lite-v1:0
-EVENT_STORMING_OBSERVE_MODEL=amazon.nova-pro-v1:0
-EVENT_STORMING_EXTRACT_MODEL=amazon.nova-lite-v1:0
-EVENT_STORMING_NORMALIZE_MODEL=amazon.nova-lite-v1:0
+| Capítulo | Argumento |
+|----------|-----------|
+| 10 | Mutabilidade é risco |
+| 11 | O contrato do domínio |
+| 12 | Persistência acompanha o comportamento |
+| 13 | A Matriz de Confiabilidade |
+| 14 | O Plano de Confiabilidade |
+
+### Parte IV — Do Conhecimento ao Compromisso
+
+| Capítulo | Argumento |
+|----------|-----------|
+| 15 | O OBC |
+| 16 | Quando experimentar e quando comprometer |
+| 17 | ODD, PRE e Delivery |
+| 18 | Runtime é a prova |
+
+---
+
+## O caso do livro
+
+O fio narrativo do livro é o **Group Buying / Tuangou**.
+
+A jornada percorrida:
+
+```
+PIM → Catálogo → Oferta → Ordem de Compra → Pedido → Pedido faturado → Produto recebido
 ```
 
-### obc-o11y
+Esse caso demonstra Event Storming, Value Stream, entidades protagonistas, mutabilidade, Bounded Contexts, contratos, persistência, observabilidade, Matriz de Confiabilidade, Plano de Confiabilidade, OBC e PRE — de ponta a ponta, sem exemplos artificiais.
 
-Arquivo: `obc-o11y/.env`
+---
 
-`LANGSMITH_API_KEY` não é necessária para a execução atual do `obc-o11y`.
+## O código como exemplo
 
-Variáveis mínimas para geração com Bedrock:
+O código neste repositório exemplifica os conceitos do livro em dois momentos do fluxo ODD:
 
-```dotenv
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_SESSION_TOKEN=... # opcional
-AWS_REGION=us-east-1
+**`event-storming/`** — transforma uma imagem de Event Storming em contexto estruturado de domínio, extraindo eventos, touch points, serviços e fluxos detectados na sessão.
 
-BEDROCK_REQUEST_TIMEOUT_MS=3600000
+**`obc-o11y/`** — recebe o contexto estruturado e o transforma em plano de observabilidade, gerando configurações Terraform para os providers Datadog, Dynatrace e Grafana.
 
-ODD_ORCHESTRATION_MODEL=amazon.nova-lite-v1:0
-ODD_ORCHESTRATION_CATEGORIZE_MODEL=amazon.nova-lite-v1:0
-ODD_ORCHESTRATION_SLO_MODEL=amazon.nova-lite-v1:0
-ODD_ORCHESTRATION_PLAN_MODEL=amazon.nova-lite-v1:0
+O fluxo que esses dois módulos percorrem é o mesmo fluxo que o livro descreve:
+
+```
+imagem do Event Storming
+         ↓
+ contexto de domínio estruturado   (event-storming)
+         ↓
+ plano de observabilidade          (obc-o11y)
+         ↓
+ dashboards e SLOs aplicados
 ```
 
-Variáveis por provider:
+Para instruções de instalação e execução dos exemplos de código, consulte:
 
-Datadog:
+- [`event-storming/bedrock/README.md`](event-storming/bedrock/README.md)
+- [`obc-o11y/README.md`](obc-o11y/README.md)
 
-```dotenv
-DD_API_KEY=...
-DD_APP_KEY=...
-DD_SITE=datadoghq.com
-DD_API_BASE_URL=https://api.datadoghq.com
-DD_EVENT_BATCH_SIZE=10
-```
+---
 
-Dynatrace:
+## ODD no ProdOps
 
-```dotenv
-DYNATRACE_ENV_URL=https://SEU-AMBIENTE.live.dynatrace.com
-DYNATRACE_API_TOKEN=...
-DYNATRACE_PLATFORM_TOKEN=...
-DYNATRACE_ENTITY_SELECTOR=...     # opcional
-DYNATRACE_MANAGEMENT_ZONE=...     # opcional
-DYNATRACE_EVENT_TIMEOUT_MINUTES=15
-```
+ODD é parte de um conjunto editorial:
 
-Grafana:
+**From Intent to Outcome** — explica o Operating Model completo: `Intent → Upstream → Commitment → Downstream → Outcome`
 
-```dotenv
-GRAFANA_URL=...
-GRAFANA_AUTH=...
-GRAFANA_METRICS_URL=...
-GRAFANA_METRICS_USER=...
-GRAFANA_METRICS_TOKEN=...
-```
+**ODD** — explica como compreender o domínio antes do compromisso: `Intent → Journey → Domain → Reliability → OBC`
 
-## Como executar
+**From Commitment to Outcome** — explica como executar depois do compromisso: `OBC → PRE → Delivery → Runtime → Outcome`
 
-### 1. Gerar contexto estruturado a partir da imagem
+Os livros não competem. Formam uma sequência.
 
-No `event-storming/bedrock`:
+---
 
-```bash
-cd event-storming/bedrock
+## O diferencial intelectual
 
-npm run start -- \
-  --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
-  --env dev \
-  --provider bedrock
-```
+| Abordagem | Pergunta central |
+|-----------|-----------------|
+| DDD | Como modelar o domínio? |
+| Observabilidade tradicional | O que está acontecendo no sistema? |
+| DevOps | Como entregar e operar continuamente? |
+| ProdOps | Como manter o produto operável durante sua evolução? |
+| **ODD** | **O que precisamos compreender sobre o domínio para saber o que deverá ser observado, operado e protegido antes de assumir o compromisso de construir?** |
 
-Saídas principais:
+---
 
-- `01-image-observation.json`
-- `02-candidate-events.json`
-- `03-standardized-context.json`
-- `04-workbook.json`
-- `recognized-event-storming.xlsx`
-
-Retomadas suportadas:
-
-Do `extract`:
-
-```bash
-npm run start -- \
-  --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
-  --provider bedrock \
-  --start-from extract \
-  --image-observation ./generated/payments/01-image-observation.json
-```
-
-Do `normalize`:
-
-```bash
-npm run start -- \
-  --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
-  --provider bedrock \
-  --start-from normalize \
-  --candidate-context ./generated/payments/02-candidate-events.json
-```
-
-### 2. Gerar e aplicar observabilidade
-
-No `obc-o11y`:
-
-Exemplo completo com o contexto gerado pelo `event-storming/bedrock`:
-
-```bash
-cd obc-o11y
-
-npm run workflow -- \
-  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments - v4" \
-  --dashboard-key "payments-acompanhamento-v4" \
-  --env dev \
-  --provider datadog
-```
-
-Providers suportados:
-
-- `datadog`
-- `dynatrace`
-- `grafana`
-
-Exemplo completo para Dynatrace:
-
-```bash
-cd obc-o11y
-
-npm run workflow -- \
-  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments - Dynatrace" \
-  --dashboard-key "payments-acompanhamento-dynatrace" \
-  --env dev \
-  --provider dynatrace \
-  --end-at apply
-```
-
-Exemplo completo para Datadog com rajadas:
-
-```bash
-cd obc-o11y
-
-npm run workflow -- \
-  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments - v4" \
-  --dashboard-key "payments-acompanhamento-v4" \
-  --env dev \
-  --provider datadog \
-  --burst-count 6 \
-  --burst-interval-ms 10000 \
-  --copies-per-event 4 \
-  --randomize-event-counts
-```
-
-## obc-o11y em detalhes
-
-### Scripts
-
-```bash
-npm run workflow
-npm run applier
-npm run check
-```
-
-### Etapas do workflow
-
-1. `input`
-2. `categorize`
-3. `slos`
-4. `plan`
-5. `terraform`
-6. `slo_terraform`
-7. `apply`
-
-### Execução parcial
-
-Parar no `plan`:
-
-```bash
-npm run workflow -- \
-  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments - v4" \
-  --dashboard-key "payments-acompanhamento-v4" \
-  --provider datadog \
-  --end-at plan
-```
-
-Executar só `terraform` a partir de um `plan.json`:
-
-```bash
-npm run workflow -- \
-  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
-  --dashboard-key "<dashboard-key>" \
-  --provider datadog \
-  --start-from terraform \
-  --end-at terraform
-```
-
-Executar só `apply` a partir de um `plan.json`:
-
-```bash
-npm run workflow -- \
-  --plan-file ./generated/<dashboard-key>/<run-id>/plan.json \
-  --dashboard-key "<dashboard-key>" \
-  --provider dynatrace \
-  --start-from apply \
-  --end-at apply
-```
-
-### Saídas do obc-o11y
-
-Por execução:
-
-- `generated/<dashboard-key>/<run-id>/`
-
-Arquivos principais:
-
-- `rows.json`
-- `categorized-events.json`
-- `slo-suggestions.json`
-- `plan.json`
-- `custom-events.json`
-- `<provider>-dashboard.auto.tf.json`
-- `<provider>-slos.auto.tf.json` quando houver
-- `<provider>-bundle.auto.tf.json`
-- `dashboard-metadata.json`
-- `apply-report.json` quando `apply` for executado
-
-Workspace Terraform isolado:
-
-- `generated/terraform-workspaces/<provider>/<dashboard-key>/`
-
-## Fluxo recomendado
-
-```bash
-cd event-storming/bedrock
-npm install
-npm run start -- \
-  --input-image samples/ODD-Payments-EventStorming.png \
-  --output-dir ./generated/payments \
-  --env dev \
-  --provider bedrock
-
-cd ../../obc-o11y
-npm install
-npm run workflow -- \
-  --input ../event-storming/bedrock/generated/payments/03-standardized-context.json \
-  --dashboard-title "ODD - Payments - v4" \
-  --dashboard-key "payments-acompanhamento-v4" \
-  --env dev \
-  --provider datadog
-```
-
-## Observações
-
-- O `event-storming/foss` existe no repositório, mas o caminho principal hoje continua sendo `event-storming/bedrock`.
-- O `obc-o11y` é o orchestrator ativo do repo.
-- O `odd-orchestrator` legado não é mais o ponto de entrada recomendado deste README.
+> **Code in production is the only code that matters.**
+>
+> ODD existe para que, quando o código chegar à produção, o time já saiba o que observar, por que observar e o que fazer quando algo sair do esperado.
