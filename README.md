@@ -185,8 +185,8 @@ imagem do Event Storming
 
 Para instruções de instalação e execução dos exemplos de código, consulte:
 
-- [`event-storming/bedrock/README.md`](event-storming/bedrock/README.md)
-- [`obc-o11y/README.md`](obc-o11y/README.md)
+- [`examples/event-storming/bedrock/README.md`](examples/event-storming/bedrock/README.md)
+- [`examples/obc-o11y/README.md`](examples/obc-o11y/README.md)
 
 ---
 
