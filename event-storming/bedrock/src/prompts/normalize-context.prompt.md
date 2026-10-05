@@ -25,7 +25,8 @@ Instruções:
 - não gere `dashboard_widget`
 - se um item parecer touch point e não evento, remova-o das linhas
 - preserve `stage` no padrão slug `dominio_subdominio`
-- preserve `service` no padrão `dominio.subdominio`
+- preserve `service` a partir do domínio de negócio quando não houver um serviço específico escrito/evidenciado na imagem
+- só preserve `service` no padrão `dominio.subdominio` quando o serviço específico estiver explícito na imagem; não derive serviço específico a partir do título do evento
 - preserve `tags` no padrão `touch_point:<slug>,business_domain:<slug>`
 - `tags.touch_point:<slug>` deve ser a versão slugificada (acentos removidos, espaços por `_`, lowercase) do `source_touch_point` correspondente; nunca devolva uma `tag.touch_point` que aponte para um touch point diferente do `source_touch_point` do evento
 - se um evento candidato chegar com `tags.touch_point` divergente do `source_touch_point`, corrija `tags.touch_point` para refletir o slug do `source_touch_point`; trate `source_touch_point` como a fonte da verdade

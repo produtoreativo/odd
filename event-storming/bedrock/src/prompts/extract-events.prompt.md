@@ -22,10 +22,11 @@ Regras:
 - não invente eventos implícitos
 - `candidateEvents.ordem` deve ser sequencial começando em 1
 - `stage` deve refletir o agrupamento de domínio/subdomínio do evento em slug curto
-- derive `service` no padrão `dominio.subdominio` sempre que houver evidência suficiente no touch point
+- derive `service` a partir do domínio de negócio quando não houver um serviço específico escrito/evidenciado na imagem
+- só use `service` no padrão `dominio.subdominio` quando o serviço específico estiver explícito na imagem; não derive serviço específico a partir do título do evento
 - derive `tags` com o padrão `touch_point:<slug>,business_domain:<slug>`
 - inclua `source_touch_point` quando souber qual touch point originou o evento
-- para `stage` e `service`, derive termos curtos a partir dos tokens mais informativos do touch point e do evento, sem copiar frases longas
+- para `stage`, derive termos curtos a partir dos tokens mais informativos do touch point e do evento, sem copiar frases longas
 - exemplo de formato: `Processo de Revisão` pode virar `stage: processo_revisao`, `service: processo.revisao`
 - `description` nunca pode ser string vazia
 - `actor`, `service` e `tags` nunca podem ser string vazia

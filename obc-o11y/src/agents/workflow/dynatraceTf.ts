@@ -254,15 +254,19 @@ function lineChartTile(title: string, query: string, palette: DashboardPalette):
   };
 }
 
-function eventFilter(widget: DashboardWidgetPlan): string {
+function eventFilter(widget: DashboardWidgetPlan, dashboardKey: string): string {
   const names = widget.sourceEventKeys;
-  return names
-    .map((name) => `event.type == "${name}"`)
+  const eventKeyFilter = names
+    .map((name) => `odd.event_key == "${name}"`)
     .join(' or ');
+  return [
+    `odd.dashboard_key == "${dashboardKey}"`,
+    `(${eventKeyFilter})`
+  ].join(' and ');
 }
 
-function dqlForSingleValue(widget: DashboardWidgetPlan): string {
-  const filters = eventFilter(widget);
+function dqlForSingleValue(widget: DashboardWidgetPlan, dashboardKey: string): string {
+  const filters = eventFilter(widget, dashboardKey);
   return [
     'fetch bizevents',
     `| filter ${filters}`,
@@ -270,8 +274,8 @@ function dqlForSingleValue(widget: DashboardWidgetPlan): string {
   ].join('\n');
 }
 
-function dqlForTimeseries(widget: DashboardWidgetPlan): string {
-  const filters = eventFilter(widget);
+function dqlForTimeseries(widget: DashboardWidgetPlan, dashboardKey: string): string {
+  const filters = eventFilter(widget, dashboardKey);
   return [
     'fetch bizevents',
     `| filter ${filters}`,
@@ -298,7 +302,8 @@ function buildHeaderTile(
 function buildHeroTile(
   document: DynatraceDashboardDocument,
   id: number,
-  band: DashboardBandPlan
+  band: DashboardBandPlan,
+  dashboardKey: string
 ): number {
   const widget = band.widgets[0];
   if (!widget) {
@@ -311,7 +316,7 @@ function buildHeroTile(
     return GRID.heroHeight + GRID.sectionGap;
   }
 
-  addTile(document, id, singleValueTile(widget.title, dqlForSingleValue(widget), widget), {
+  addTile(document, id, singleValueTile(widget.title, dqlForSingleValue(widget, dashboardKey), widget), {
     x: 0,
     y: 0,
     w: GRID.totalColumns,
@@ -331,7 +336,8 @@ function buildBandTiles(
   band: DashboardBandPlan,
   sectionTitle: string,
   startTop: number,
-  height: number
+  height: number,
+  dashboardKey: string
 ): { nextId: number; nextTop: number } {
   let id = startingId;
 
@@ -364,8 +370,8 @@ function buildBandTiles(
     }
 
     const tile = widget.widgetType === 'timeseries'
-      ? lineChartTile(widget.title, dqlForTimeseries(widget), widget.palette)
-      : singleValueTile(widget.title, dqlForSingleValue(widget), widget);
+      ? lineChartTile(widget.title, dqlForTimeseries(widget, dashboardKey), widget.palette)
+      : singleValueTile(widget.title, dqlForSingleValue(widget, dashboardKey), widget);
 
     addTile(document, id, tile, {
       x: left,
@@ -379,7 +385,7 @@ function buildBandTiles(
   return { nextId: id, nextTop: contentTop + rows * height + GRID.sectionGap };
 }
 
-function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboardDocument {
+function buildDynatraceDashboardDocument(plan: DashboardPlan, dashboardKey: string): DynatraceDashboardDocument {
   const document: DynatraceDashboardDocument = {
     version: 21,
     variables: [],
@@ -395,7 +401,7 @@ function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboar
 
   for (const band of plan.bands) {
     if (isHeroBand(band)) {
-      top = buildHeroTile(document, nextId, band);
+      top = buildHeroTile(document, nextId, band, dashboardKey);
       nextId += 1;
       continue;
     }
@@ -403,7 +409,7 @@ function buildDynatraceDashboardDocument(plan: DashboardPlan): DynatraceDashboar
     const bandHeight = band.widgets.some((widget) => widget.widgetType === 'timeseries')
       ? GRID.trendHeight
       : GRID.rowHeight;
-    const bandResult = buildBandTiles(document, nextId, band, band.title, top, bandHeight);
+    const bandResult = buildBandTiles(document, nextId, band, band.title, top, bandHeight, dashboardKey);
     nextId = bandResult.nextId;
     top = bandResult.nextTop;
   }
@@ -419,7 +425,7 @@ export async function buildDynatraceDashboardTerraform(plan: DashboardPlan, dash
     return {};
   }
 
-  const document = buildDynatraceDashboardDocument(plan);
+  const document = buildDynatraceDashboardDocument(plan, dashboardKey);
   const name = resourceName(dashboardKey);
 
   return {

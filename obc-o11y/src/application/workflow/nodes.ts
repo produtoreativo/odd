@@ -27,6 +27,7 @@ import { Logger } from '../../shared/logger.js';
 import { buildEnvTag, buildEventQueryHint } from '../../shared/query-hint.js';
 import { mergeTerraformJson } from '../../shared/terraform-json.js';
 import { DashboardPlan, EventStormingRow, FlowOccurrence, SloSuggestion } from '../../shared/types.js';
+import { shouldGenerateDynatraceSloTerraform } from '../../shared/dynatrace-options.js';
 import { ObservabilityWorkflowState } from './state.js';
 
 const logger = new Logger('observability-workflow');
@@ -345,7 +346,7 @@ export async function compileSloTerraformNode(state: ObservabilityWorkflowState)
       dashboardKey: state.dashboardKey,
       dashboardTitle: state.plan.dashboardTitle
     })
-    : state.provider === 'dynatrace'
+    : state.provider === 'dynatrace' && shouldGenerateDynatraceSloTerraform()
       ? translateOpenSloToDynatraceTerraform(openSloDocuments, { dashboardKey: state.dashboardKey })
       : {};
   const terraformJson = mergeTerraformJson(state.dashboardTerraformJson, sloTerraformJson);

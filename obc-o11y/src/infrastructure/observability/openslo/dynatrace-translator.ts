@@ -9,12 +9,10 @@ type DynatraceSloResource = {
   description?: string;
   metric_expression: string;
   evaluation: 'AGGREGATE';
-  target_success: number;
-  target_warning: number;
+  target: number;
+  warning: number;
   timeframe: string;
   filter?: string;
-  enabled: true;
-  tags?: string[];
 };
 
 const DEFAULT_TIMEFRAME = '-7d';
@@ -100,15 +98,6 @@ function buildDynatraceSloResource(
     return null;
   }
 
-  const tags = [
-    'source:odd',
-    `env:${labels.env}`,
-    `dashboard_key:${context.dashboardKey}`,
-    `slo_id:${labels.slo_id ?? doc.metadata.name}`,
-    `sli_type:${sliType}`,
-    'format:openslo-v1'
-  ];
-
   return {
     resourceName,
     resource: {
@@ -116,11 +105,9 @@ function buildDynatraceSloResource(
       description: annotations.rationale ?? annotations.objective,
       metric_expression: metricExpression,
       evaluation: 'AGGREGATE',
-      target_success: target,
-      target_warning: warning,
-      timeframe: DEFAULT_TIMEFRAME,
-      enabled: true,
-      tags
+      target,
+      warning,
+      timeframe: DEFAULT_TIMEFRAME
     }
   };
 }

@@ -14,6 +14,7 @@ const logger = new Logger('context-normalizer');
 type NormalizationOptions = {
   inputImage?: string;
   env?: string;
+  explicitServices?: string[];
 };
 
 type ProjectMetadata = {
@@ -75,7 +76,7 @@ export function candidateContextToRecognizedContext(
         event_title: event.event_title,
         stage: normalizeStage(event.stage || metadata.stage),
         actor: normalizeActor(event.actor || metadata.actor),
-        service: normalizeService(event.service || metadata.service),
+        service: resolveEventService(event.service, tagsAlignedWithSource, metadata, options),
         tags: tagsAlignedWithSource,
         dashboard_widget: 'event_stream',
         query_hint: '',
@@ -147,6 +148,8 @@ export function imageObservationToCandidateContext(
   observation: ImageObservation,
   options: NormalizationOptions = {}
 ): CandidateContext {
+  const normalizationOptions = withObservationServices(options, observation);
+
   logger.info(t('log.context.imageToCandidates'), {
     touchPointCount: observation.touchPointsDetected.length,
     correlationCount: observation.touchPointEventCorrelations.length,
@@ -188,7 +191,7 @@ export function imageObservationToCandidateContext(
     sanitizedCorrelations,
     observedFlows
   );
-  const projectMetadata = deriveProjectMetadataFromObservation(observation, options);
+  const projectMetadata = deriveProjectMetadataFromObservation(observation, normalizationOptions);
 
   const flattenedEvents = eventOrder.map((eventTitle) => {
     const touchPoint = strongestTouchPointByEvent.get(eventTitle)
@@ -200,15 +203,16 @@ export function imageObservationToCandidateContext(
       touchPoint,
       projectMetadata.businessDomain
     );
+    const tags = buildTags({
+      touchPoint,
+      businessDomain: projectMetadata.businessDomain
+    });
     return {
       event_title: eventTitle,
       stage: metadata.stage,
       actor: inferActor(observation.actorsDetected),
-      service: metadata.service,
-      tags: buildTags({
-        touchPoint,
-        businessDomain: projectMetadata.businessDomain
-      }),
+      service: resolveEventService(metadata.service, tags, metadata, normalizationOptions),
+      tags,
       source_touch_point: touchPoint
     };
   });
@@ -274,7 +278,7 @@ export function imageObservationToCandidateContext(
     candidateEvents: uniqueEvents,
     discardedItems: observation.uncertainItems,
     assumptions: observation.assumptions
-  }, options);
+  }, normalizationOptions);
 }
 
 export function normalizeCandidateContextDomainModels(
@@ -293,7 +297,7 @@ export function normalizeCandidateContextDomainModels(
       ...event,
       stage: normalizeStage(event.stage || metadata.stage),
       actor: normalizeActor(event.actor || metadata.actor),
-      service: normalizeService(event.service || metadata.service),
+      service: resolveEventService(event.service, event.tags, metadata, options),
       tags: enforceTouchPointTag(mergePromptTags(event.tags, metadata.tags), metadata.sourceTouchPoint),
       source_touch_point: metadata.sourceTouchPoint
     };
@@ -327,7 +331,8 @@ export function enrichCandidateContextFromObservation(
   observation: ImageObservation,
   options: NormalizationOptions = {}
 ): CandidateContext {
-  const deterministicContext = imageObservationToCandidateContext(observation, options);
+  const normalizationOptions = withObservationServices(options, observation);
+  const deterministicContext = imageObservationToCandidateContext(observation, normalizationOptions);
   const deterministicEventByTitle = new Map(
     deterministicContext.candidateEvents.map((event) => [event.event_title, event])
   );
@@ -358,7 +363,7 @@ export function enrichCandidateContextFromObservation(
         source_touch_point: resolvedSourceTouchPoint
       };
     })
-  }, options);
+  }, normalizationOptions);
 }
 
 function buildObservedEventOrder(observedEvents: string[], flows: ImageObservation['flowsDetected']): string[] {
@@ -789,6 +794,55 @@ function buildEventMetadata(
     }),
     eventKeyBase: buildEventKeyBase(projectMetadata.businessDomain, touchPointMetadata.service, event.event_title)
   };
+}
+
+function withObservationServices(options: NormalizationOptions, observation: ImageObservation): NormalizationOptions {
+  return {
+    ...options,
+    explicitServices: options.explicitServices ?? observation.servicesDetected
+  };
+}
+
+function resolveEventService(
+  proposedService: string,
+  tags: string,
+  metadata: Pick<EventMetadata, 'domain' | 'service'>,
+  options: NormalizationOptions
+): string {
+  const normalizedProposedService = normalizeService(proposedService);
+
+  if (!Array.isArray(options.explicitServices)) {
+    return normalizedProposedService || metadata.service;
+  }
+
+  if (hasExplicitServiceEvidence(normalizedProposedService, options.explicitServices)) {
+    return normalizedProposedService;
+  }
+
+  return normalizeService(extractTagValue(tags, 'business_domain') || metadata.domain);
+}
+
+function hasExplicitServiceEvidence(service: string, explicitServices: string[]): boolean {
+  if (!service) {
+    return false;
+  }
+
+  return explicitServices
+    .map(normalizeService)
+    .filter(Boolean)
+    .some((explicitService) => explicitService === service);
+}
+
+function extractTagValue(tags: string, key: string): string | undefined {
+  return tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .map((tag) => {
+      const [tagKey, ...valueParts] = tag.split(':');
+      return { key: tagKey, value: valueParts.join(':') };
+    })
+    .find((tag) => tag.key === key && tag.value.trim() !== '')
+    ?.value.trim();
 }
 
 function inferTouchPointFromCandidateContext(eventTitle: string, candidateContext: CandidateContext): string | undefined {

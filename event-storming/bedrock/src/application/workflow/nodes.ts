@@ -512,7 +512,7 @@ export async function extractEventsNode(state: WorkflowGraphState) {
   const model = buildChatModel(state.provider, state.extractModel);
   const deterministicCandidateContext = normalizeCandidateContextDomainModels(
     imageObservationToCandidateContext(imageObservation, { inputImage: state.inputImage }),
-    { inputImage: state.inputImage, env: state.env }
+    { inputImage: state.inputImage, env: state.env, explicitServices: imageObservation.servicesDetected }
   );
   const execute = traceStep(
     async () => {
@@ -529,9 +529,9 @@ export async function extractEventsNode(state: WorkflowGraphState) {
           : enrichCandidateContextFromObservation(
               parsedCandidateContext,
               imageObservation,
-              { inputImage: state.inputImage, env: state.env }
+              { inputImage: state.inputImage, env: state.env, explicitServices: imageObservation.servicesDetected }
             ),
-        { inputImage: state.inputImage, env: state.env }
+        { inputImage: state.inputImage, env: state.env, explicitServices: imageObservation.servicesDetected }
       );
       await persistStageJson(state.outputDir, '02-candidate-events.json', candidateContext);
 
@@ -644,7 +644,8 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
   const model = buildChatModel(state.provider, state.normalizeModel);
   const deterministicContext = candidateContextToRecognizedContext(candidateContext, {
     inputImage: state.inputImage,
-    env: state.env
+    env: state.env,
+    explicitServices: state.imageObservation?.servicesDetected ?? []
   });
   const execute = traceStep(
     async () => {
@@ -662,7 +663,8 @@ export async function normalizeContextNode(state: WorkflowGraphState) {
       const review = NormalizationReviewSchema.parse(parseJsonResponse(response.content));
       const standardizedContext = canonicalizeContext(applyNormalizationReview(candidateContext, review, {
         inputImage: state.inputImage,
-        env: state.env
+        env: state.env,
+        explicitServices: state.imageObservation?.servicesDetected ?? []
       }), { env: state.env });
 
       await persistStageJson(state.outputDir, '03-standardized-context.json', standardizedContext);
