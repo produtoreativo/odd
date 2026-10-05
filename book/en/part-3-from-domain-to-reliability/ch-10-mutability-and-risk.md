@@ -1,4 +1,4 @@
-# Chapter 10 — Mutability Is Risk
+# Chapter 10: Mutability Is Risk
 
 If an entity changes, we need to understand how it changes. If it changes frequently, the need for observation increases. If it changes in a context of low tolerance for deviation, the need for consistency increases as well.
 

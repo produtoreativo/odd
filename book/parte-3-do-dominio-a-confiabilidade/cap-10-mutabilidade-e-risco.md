@@ -1,4 +1,4 @@
-# Capítulo 10 — Mutabilidade é risco
+# Capítulo 10: Mutabilidade é risco
 
 Se uma entidade muda, precisamos compreender como ela muda. Se ela muda frequentemente, a necessidade de observação aumenta. Se ela muda em um contexto de baixa tolerância ao desvio, a necessidade de consistência aumenta também.
 
