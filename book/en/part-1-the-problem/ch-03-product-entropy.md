@@ -1,4 +1,4 @@
-# Chapter 3 — Product Entropy
+# Chapter 3: Product Entropy
 
 Every product accumulates information. Part of it is explicit: code, documents, dashboards, runbooks. Part of it is distributed among people, decisions that were never recorded, assumptions that were never questioned, and incidents that were resolved without the root cause ever being made public.
 
@@ -48,7 +48,7 @@ Entropy also appears as invisible dependency. A service can depend on a projecti
 
 The central consequence is simple: more understanding produces less ambiguity. Less ambiguity produces less useless WIP. Less useless WIP produces fewer hidden decisions. Fewer hidden decisions produces better capacity to model reliability. Better reliability produces lower risk in production.
 
-ODD does not resolve entropy definitively. No approach eliminates the uncertainty of a system that evolves. What ODD seeks is to reduce uncertainty at the moment when it is most manageable — before the domain becomes an engineering commitment.
+ODD does not resolve entropy definitively. No approach eliminates the uncertainty of a system that evolves. What ODD seeks is to reduce uncertainty at the moment when it is most manageable, before the domain becomes an engineering commitment.
 
 Once code is in production, retroactive domain discovery is possible, but costly. Organizational incentives rarely support stopping to understand what has already been delivered. ODD proposes that this work happen before.
 

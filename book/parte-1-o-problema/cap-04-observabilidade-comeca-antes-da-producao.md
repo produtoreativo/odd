@@ -1,4 +1,4 @@
-# Capítulo 4 — Observabilidade começa antes da produção
+# Capítulo 4: Observabilidade começa antes da produção
 
 Existe uma forma tardia de observar software: esperar o sistema entrar em produção e então decidir o que monitorar. Essa abordagem pode produzir muitos dados e pouca compreensão.
 
@@ -26,7 +26,7 @@ Uma distinção presente no material de referência é relevante aqui: observabi
 
 O plano transacional está concentrado nas operações imediatas do sistema. Seu objetivo é facilitar a resposta direta e rápida. Quando um grupo é encerrado com status de erro crítico, o time precisa ser acionado imediatamente.
 
-O plano analítico apoia decisões de médio e longo prazo. Taxas de conversão, padrões de abandono, comportamento de formação de grupos ao longo do tempo — essas informações são úteis para evolução do produto, mas não precisam estar no mesmo pipeline que os alertas operacionais.
+O plano analítico apoia decisões de médio e longo prazo. Taxas de conversão, padrões de abandono, comportamento de formação de grupos ao longo do tempo, essas informações são úteis para evolução do produto, mas não precisam estar no mesmo pipeline que os alertas operacionais.
 
 Misturar os dois produz complexidade desnecessária e, com frequência, embota a capacidade de reagir. Quando tudo é igualmente observável, nada é prioritariamente observável.
 
@@ -34,7 +34,7 @@ Misturar os dois produz complexidade desnecessária e, com frequência, embota a
 
 A decisão sobre o que merece ser observado é uma decisão de domínio.
 
-Ela depende de conhecer a jornada, os eventos que a compõem, as entidades que mudam durante a jornada e as dependências que podem comprometer a experiência. Sem esse conhecimento, a escolha do que monitorar tende a ser feita por critérios técnicos — o que é mais fácil de instrumentar, o que a ferramenta já expõe por padrão — em vez de critérios de negócio.
+Ela depende de conhecer a jornada, os eventos que a compõem, as entidades que mudam durante a jornada e as dependências que podem comprometer a experiência. Sem esse conhecimento, a escolha do que monitorar tende a ser feita por critérios técnicos, o que é mais fácil de instrumentar, o que a ferramenta já expõe por padrão, em vez de critérios de negócio.
 
 Por isso observabilidade começa antes da produção. Não porque dashboards precisem ser criados antes do lançamento, mas porque a pergunta sobre o que observar precisa ser respondida enquanto o domínio ainda está sendo compreendido.
 
@@ -44,7 +44,7 @@ Quando essa pergunta é respondida durante a descoberta do domínio, a observabi
 
 O material de referência estabelece três princípios operacionais que se conectam diretamente a essa preocupação.
 
-O primeiro é colocar em produção mais rápido — não como um fim em si mesmo, mas como forma de encurtar o ciclo de feedback entre o que foi construído e o que o cliente experimenta. O segundo é jogar o incidente mais longe possível — circuit breakers, retries, failovers; mecanismos que reduzem a superfície de impacto de uma falha antes que ela afete a experiência. O terceiro é reagir imediato — alertas acionáveis, runbooks, war rooms; a capacidade de responder rapidamente depende de que a observabilidade já saiba o que perguntar.
+O primeiro é colocar em produção mais rápido, não como um fim em si mesmo, mas como forma de encurtar o ciclo de feedback entre o que foi construído e o que o cliente experimenta. O segundo é jogar o incidente mais longe possível, circuit breakers, retries, failovers; mecanismos que reduzem a superfície de impacto de uma falha antes que ela afete a experiência. O terceiro é reagir imediato, alertas acionáveis, runbooks, war rooms; a capacidade de responder rapidamente depende de que a observabilidade já saiba o que perguntar.
 
 Os três princípios dependem de um domínio suficientemente compreendido. Não é possível jogar o incidente mais longe se não se sabe qual parte da jornada está em risco. Não é possível reagir imediato se os alertas não têm contexto de negócio suficiente para direcionar a ação.
 

@@ -1,8 +1,8 @@
-# Capítulo 6 — Comece pela jornada
+# Capítulo 6: Comece pela jornada
 
 O primeiro movimento de ODD é enxergar.
 
-Isso parece óbvio até perceber que a maioria das organizações começa por outra coisa. Começam por um serviço que precisa ser criado, por uma API que precisa ser definida, por uma funcionalidade que apareceu em uma reunião de planejamento. Começam pelo que é tecnicamente tangível — não pelo que é operacionalmente relevante.
+Isso parece óbvio até perceber que a maioria das organizações começa por outra coisa. Começam por um serviço que precisa ser criado, por uma API que precisa ser definida, por uma funcionalidade que apareceu em uma reunião de planejamento. Começam pelo que é tecnicamente tangível, não pelo que é operacionalmente relevante.
 
 Uma organização pode conhecer suas aplicações e ainda desconhecer sua jornada. Pode conhecer seus times e ainda não saber onde o cliente perde valor. Pode conhecer suas integrações e ainda não saber qual dependência ameaça uma experiência.
 
@@ -20,7 +20,7 @@ Jornada, Value Stream e Service Blueprint cumprem funções complementares nessa
 
 *A Service Blueprint organiza a jornada em camadas: as ações do cliente nos pontos de contato (Product Page, Buy Now, Shopping Cart View, View Order), os times responsáveis por cada parte (Channel Team, Shopping Cart Team, Order Management Team), e os serviços que sustentam cada etapa (Catalog, Pricing, Store, Shipping Costs, Payments). A marcação de falha em `getDiscountRulesInCart 1.2` mostra exatamente o tipo de dependência invisível que uma blueprint bem feita torna visível antes do incidente. Fonte: slide 21 da apresentação "ProdOps — Modelagem de Domínio com Confiabilidade, Parte 1".*
 
-O Product Deck organiza o que foi descoberto a partir das quatro dimensões do produto: Cliente, Empresa, Time e Tecnologia. Sua função não é produzir um relatório. É ser um índice para tomadas de decisão rápidas, integrando as visões que costumam existir separadas — a visão do negócio, a visão da operação, a visão do time e a visão técnica.
+O Product Deck organiza o que foi descoberto a partir das quatro dimensões do produto: Cliente, Empresa, Time e Tecnologia. Sua função não é produzir um relatório. É ser um índice para tomadas de decisão rápidas, integrando as visões que costumam existir separadas, a visão do negócio, a visão da operação, a visão do time e a visão técnica.
 
 ## Group Buying: a jornada que revela o domínio
 
@@ -32,13 +32,13 @@ Existe um produto que precisa estar disponível no catálogo, enriquecido com co
 
 Outros compradores encontram o grupo, aderem, têm carrinhos criados e invoices geradas. O grupo tem um prazo. Se o volume mínimo não for atingido antes do prazo, o grupo é encerrado com um status diferente do que seria encerrado se o volume tivesse sido atingido.
 
-Cada um desses momentos é um ponto de contato — um lugar onde algo significativo acontece entre o negócio e o cliente. Cada ponto de contato pode ser o lugar onde a experiência é preservada ou onde ela se rompe.
+Cada um desses momentos é um ponto de contato, um lugar onde algo significativo acontece entre o negócio e o cliente. Cada ponto de contato pode ser o lugar onde a experiência é preservada ou onde ela se rompe.
 
 ## Por que quatro dimensões
 
 A jornada, sozinha, corre o risco de ser reduzida à perspectiva do cliente. ODD precisa de uma visão mais ampla porque confiabilidade não depende apenas de como o cliente experiencia o produto.
 
-A dimensão do **Fluxo** mostra o movimento da jornada — onde o produto avança, onde ele para, onde ele falha. A dimensão do **Time** mostra quem possui capacidade e responsabilidade em cada parte da jornada. A dimensão dos **Dados** mostra o que muda e o que esse comportamento significa para o negócio. A dimensão das **Peças** mostra as aplicações e dependências que sustentam a trajetória.
+A dimensão do **Fluxo** mostra o movimento da jornada, onde o produto avança, onde ele para, onde ele falha. A dimensão do **Time** mostra quem possui capacidade e responsabilidade em cada parte da jornada. A dimensão dos **Dados** mostra o que muda e o que esse comportamento significa para o negócio. A dimensão das **Peças** mostra as aplicações e dependências que sustentam a trajetória.
 
 Essas quatro dimensões juntas tornam visível aquilo que costuma permanecer invisível: as dependências entre times, as lacunas entre responsabilidades, os pontos onde a informação chega tarde demais para ser útil.
 
@@ -48,7 +48,7 @@ Enxergar não é o destino. É o início.
 
 Depois de mapear a jornada, surgem perguntas que não existiam antes: onde ocorre uma mudança relevante? Quem protagoniza essa mudança? Qual dado muda? Qual dependência participa? Qual consequência aparece se a mudança falhar?
 
-Sem a jornada, essas perguntas são feitas sobre peças isoladas e raramente recebem respostas completas. Com a jornada, elas passam a ser feitas sobre o produto como um sistema — e as respostas começam a revelar onde a confiabilidade precisa existir.
+Sem a jornada, essas perguntas são feitas sobre peças isoladas e raramente recebem respostas completas. Com a jornada, elas passam a ser feitas sobre o produto como um sistema, e as respostas começam a revelar onde a confiabilidade precisa existir.
 
 ---
 

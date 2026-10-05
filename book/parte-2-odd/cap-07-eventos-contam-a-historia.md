@@ -1,8 +1,8 @@
-# Capítulo 7 — Eventos contam a história
+# Capítulo 7: Eventos contam a história
 
 Uma jornada pode ser desenhada como uma sequência de atividades. O domínio, no entanto, se torna mais claro quando conseguimos identificar acontecimentos relevantes.
 
-Existe uma diferença importante entre atividade e evento. Uma atividade descreve o que alguém faz — o usuário clica, o sistema processa, o time aprova. Um evento descreve o que já aconteceu — um grupo foi criado, um pedido foi recebido, uma cobrança foi faturada, um produto foi entregue.
+Existe uma diferença importante entre atividade e evento. Uma atividade descreve o que alguém faz, o usuário clica, o sistema processa, o time aprova. Um evento descreve o que já aconteceu, um grupo foi criado, um pedido foi recebido, uma cobrança foi faturada, um produto foi entregue.
 
 Eventos contam a história porque registram mudanças que já se tornaram verdadeiras. Eles são o vocabulário do domínio em movimento.
 
@@ -12,15 +12,15 @@ Uma tela mostra uma representação do estado atual. Um evento mostra a mudança
 
 Essa diferença muda o que conseguimos perguntar. A partir de uma tela, podemos perguntar como ela está organizada ou o que ela exibe. A partir de um evento, podemos perguntar o que aconteceu para que ele existisse, quais entidades foram afetadas, quais outros eventos podem se seguir a ele e o que falha quando ele não ocorre no momento certo.
 
-A mudança de linguagem é decisiva. Quando uma equipe consegue descrever o domínio como uma sequência de acontecimentos — e não apenas como um conjunto de telas, campos e botões — a conversa entre negócio e tecnologia passa a ter outro nível de precisão.
+A mudança de linguagem é decisiva. Quando uma equipe consegue descrever o domínio como uma sequência de acontecimentos, e não apenas como um conjunto de telas, campos e botões, a conversa entre negócio e tecnologia passa a ter outro nível de precisão.
 
 ## Event Storming como instrumento de descoberta
 
 Event Storming é uma forma estruturada de descobrir eventos a partir do comportamento do negócio. Seu valor não está nos post its, na sala ou na ferramenta. Está na conversa que torna explícita a sequência de acontecimentos e as condições que os tornam possíveis.
 
-Uma sessão de Event Storming começa com os eventos — o que aconteceu — e trabalha retroativamente para descobrir o que os causou. Comandos, atores, sistemas externos, políticas e restrições aparecem como consequências dessa investigação.
+Uma sessão de Event Storming começa com os eventos, o que aconteceu, e trabalha retroativamente para descobrir o que os causou. Comandos, atores, sistemas externos, políticas e restrições aparecem como consequências dessa investigação.
 
-O resultado é uma narrativa do domínio que qualquer pessoa envolvida no produto consegue ler e questionar — incluindo pessoas que não escrevem código.
+O resultado é uma narrativa do domínio que qualquer pessoa envolvida no produto consegue ler e questionar, incluindo pessoas que não escrevem código.
 
 Event Storming, portanto, não encerra a modelagem. Ele abre caminho para perguntas posteriores sobre protagonistas, fronteiras e confiabilidade. Um erro seria terminar o trabalho quando o mapeamento está pronto. Os eventos interessam porque nos ajudam a descobrir domínio, responsabilidade e o que precisa ser observado.
 
@@ -46,7 +46,7 @@ Alguns dados mudam constantemente e conduzem o fluxo. Um grupo de compra muda de
 
 Outros dados participam da jornada como informação de suporte. Um produto existe e é referenciado, mas raramente muda durante uma compra específica. Uma oferta é consultada, mas não é alterada pelo ato da compra.
 
-Essa distinção — entre o que muda e o que apenas existe — prepara a descoberta dos protagonistas. E é sobre os protagonistas que o próximo capítulo trata.
+Essa distinção, entre o que muda e o que apenas existe, prepara a descoberta dos protagonistas. E é sobre os protagonistas que o próximo capítulo trata.
 
 ---
 

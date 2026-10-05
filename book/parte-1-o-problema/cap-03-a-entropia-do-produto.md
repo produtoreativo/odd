@@ -1,4 +1,4 @@
-# Capítulo 3 — A entropia do produto
+# Capítulo 3: A entropia do produto
 
 Todo produto acumula informação. Parte dela é explícita: código, documentos, dashboards, runbooks. Parte está distribuída entre pessoas, decisões que nunca foram registradas, suposições que nunca foram questionadas e incidentes que foram resolvidos sem que a causa raiz fosse tornada pública.
 
@@ -48,7 +48,7 @@ A entropia também aparece como dependência invisível. Um serviço pode depend
 
 A consequência central é simples: mais entendimento produz menos ambiguidade. Menos ambiguidade produz menos WIP inútil. Menos WIP inútil produz menos decisões escondidas. Menos decisões escondidas produz melhor capacidade de modelar confiabilidade. Melhor confiabilidade produz menor risco em produção.
 
-ODD não resolve a entropia definitivamente. Nenhuma abordagem elimina a incerteza de um sistema que evolui. O que ODD procura é reduzir a incerteza no momento em que ela é mais gerenciável — antes que o domínio se transforme em compromisso de engenharia.
+ODD não resolve a entropia definitivamente. Nenhuma abordagem elimina a incerteza de um sistema que evolui. O que ODD procura é reduzir a incerteza no momento em que ela é mais gerenciável, antes que o domínio se transforme em compromisso de engenharia.
 
 Uma vez que o código está em produção, a descoberta retroativa do domínio é possível, mas custosa. Os incentivos organizacionais raramente suportam parar para compreender o que já foi entregue. ODD propõe que esse trabalho aconteça antes.
 

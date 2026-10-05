@@ -1,4 +1,4 @@
-# Capítulo 8 — Encontre os protagonistas
+# Capítulo 8: Encontre os protagonistas
 
 Nem todo dado possui o mesmo peso em uma jornada.
 
@@ -20,13 +20,13 @@ Isso também muda a conversa sobre observabilidade. Não é possível observar t
 
 No caso Group Buying, os protagonistas se revelam quando olhamos para o que muda e o que essa mudança significa para o fluxo.
 
-O **grupo de compra** é o protagonista central. Ele inicia como um estado inexistente, é criado, anunciado, indexado. Participantes entram, pedidos são associados, o prazo avança. Ao final, o grupo é encerrado — seja com sucesso, com pendência de aprovação comercial ou com um erro crítico na persistência. Cada transição de estado é relevante e pode ter consequências em outros domínios.
+O **grupo de compra** é o protagonista central. Ele inicia como um estado inexistente, é criado, anunciado, indexado. Participantes entram, pedidos são associados, o prazo avança. Ao final, o grupo é encerrado, seja com sucesso, com pendência de aprovação comercial ou com um erro crítico na persistência. Cada transição de estado é relevante e pode ter consequências em outros domínios.
 
-O **pedido** também é protagonista. Ele nasce associado a um grupo e um carrinho, passa pelo processo de faturamento e termina como pedido faturado — um objeto que representa um compromisso financeiro do negócio com o cliente.
+O **pedido** também é protagonista. Ele nasce associado a um grupo e um carrinho, passa pelo processo de faturamento e termina como pedido faturado, um objeto que representa um compromisso financeiro do negócio com o cliente.
 
-O **carrinho** é protagonista de um ciclo mais curto e mais volátil. Ele existe enquanto o comprador está no processo de adesão e some — como objeto transacional ativo — quando o pedido é confirmado.
+O **carrinho** é protagonista de um ciclo mais curto e mais volátil. Ele existe enquanto o comprador está no processo de adesão e some, como objeto transacional ativo, quando o pedido é confirmado.
 
-Por contraste, o **produto** é principalmente coadjuvante nessa jornada. Ele é referenciado, consultado e exibido, mas raramente muda como resultado de uma compra em grupo específica. O **catálogo** e a **oferta** também são coadjuvantes — importantes para que a jornada comece, mas não alterados pelo processo em si.
+Por contraste, o **produto** é principalmente coadjuvante nessa jornada. Ele é referenciado, consultado e exibido, mas raramente muda como resultado de uma compra em grupo específica. O **catálogo** e a **oferta** também são coadjuvantes, importantes para que a jornada comece, mas não alterados pelo processo em si.
 
 ![Mapa de protagonistas e coadjuvantes ao longo da Value Stream do Group Buying, mostrando Produto, Cupom, Oferta, Cliente, Fatura e Pedido com seus papéis em cada etapa](../images/cap08-protagonistas-coadjuvantes.png)
 
@@ -38,13 +38,13 @@ Uma nuance importante: o protagonismo não é uma propriedade absoluta de uma en
 
 Em uma jornada de compra em grupo, o produto é coadjuvante. Em uma jornada de cadastro de catálogo ou de atualização de preço, o produto é protagonista. A mesma entidade pode mudar de papel dependendo do fluxo que está sendo analisado.
 
-Isso é relevante para ODD porque significa que a descoberta de protagonistas precisa acontecer em relação a uma jornada específica, não em abstrato. Quando a jornada não está clara, a identificação de protagonistas tende a ser feita por intuição ou por importância percebida — o que geralmente beneficia os dados mais familiares, não os mais críticos.
+Isso é relevante para ODD porque significa que a descoberta de protagonistas precisa acontecer em relação a uma jornada específica, não em abstrato. Quando a jornada não está clara, a identificação de protagonistas tende a ser feita por intuição ou por importância percebida, o que geralmente beneficia os dados mais familiares, não os mais críticos.
 
 ## Da descoberta à responsabilidade
 
 Identificar um protagonista levanta imediatamente uma série de perguntas que precisam de resposta: onde essa entidade é controlada? Quem responde pelas mudanças que ela sofre? Quais contratos existem ao redor dela que garantem que outros sistemas podem depender do seu estado?
 
-Essas perguntas conectam protagonistas a Bounded Contexts — o tema do próximo capítulo.
+Essas perguntas conectam protagonistas a Bounded Contexts, o tema do próximo capítulo.
 
 ---
 

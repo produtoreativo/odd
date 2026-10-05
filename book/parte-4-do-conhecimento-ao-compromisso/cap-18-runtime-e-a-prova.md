@@ -1,4 +1,4 @@
-# Capítulo 18 — Runtime é a prova
+# Capítulo 18: Runtime é a prova
 
 Um domínio pode estar bem modelado. Um OBC pode estar consistente. Um Plano de Confiabilidade pode estar completo. Ainda assim, nada disso prova que o produto funciona.
 
@@ -6,19 +6,19 @@ A prova aparece quando o software encontra a realidade.
 
 O material de referência formula isso com precisão provocativa: se não existe software em produção, não existe valor para o cliente. A frase não diminui a importância da descoberta. Ela define sua finalidade.
 
-ODD não existe para produzir diagramas perfeitos. Existe para aumentar a qualidade daquilo que será colocado em produção — e para que, quando chegar lá, saibamos o que observar.
+ODD não existe para produzir diagramas perfeitos. Existe para aumentar a qualidade daquilo que será colocado em produção, e para que, quando chegar lá, saibamos o que observar.
 
 ## O que Runtime revela
 
 Runtime é onde as decisões tomadas durante ODD, OBC e PRE são confrontadas com comportamento real.
 
-A observabilidade mostra se aquilo que foi considerado importante durante a descoberta continua acontecendo como esperado. A operação revela onde o modelo encontrou exceções — comportamentos que existiam no domínio mas não foram capturados durante a exploração. O cliente mostra se a experiência preserva o valor que motivou o produto.
+A observabilidade mostra se aquilo que foi considerado importante durante a descoberta continua acontecendo como esperado. A operação revela onde o modelo encontrou exceções, comportamentos que existiam no domínio mas não foram capturados durante a exploração. O cliente mostra se a experiência preserva o valor que motivou o produto.
 
 Esses três confrontos são inevitáveis. A questão é o que a organização consegue fazer com eles.
 
-Quando o domínio foi compreendido, os eventos foram nomeados e a observabilidade foi desenhada a partir da jornada, a organização consegue reconhecer quando a realidade diverge do que esperava. E consegue agir — com velocidade, com responsabilidade clara e com contexto suficiente para entender o que precisa ser corrigido.
+Quando o domínio foi compreendido, os eventos foram nomeados e a observabilidade foi desenhada a partir da jornada, a organização consegue reconhecer quando a realidade diverge do que esperava. E consegue agir, com velocidade, com responsabilidade clara e com contexto suficiente para entender o que precisa ser corrigido.
 
-Quando o domínio não foi compreendido, a organização reage a sintomas. O incidente tem causa raiz difícil de rastrear. O acionamento é impreciso. A correção é feita sobre incerteza — e pode criar novos problemas que só aparecerão no próximo incidente.
+Quando o domínio não foi compreendido, a organização reage a sintomas. O incidente tem causa raiz difícil de rastrear. O acionamento é impreciso. A correção é feita sobre incerteza, e pode criar novos problemas que só aparecerão no próximo incidente.
 
 ## O ciclo que se fecha
 
@@ -34,9 +34,9 @@ No Group Buying, a jornada finalmente deixa de ser uma sequência de acontecimen
 
 Pedidos são criados. Grupos mudam de estado. O encerramento automático executa. O estoque é consumido. Pagamentos acontecem. Produtos são entregues.
 
-Se a observabilidade foi desenhada a partir do domínio — se os eventos foram instrumentados, se os alertas refletem condições de negócio, se a Matriz de Confiabilidade transformou dependências em KPIs — a organização consegue ver a jornada funcionando, ou não funcionando, com a granularidade necessária para agir.
+Se a observabilidade foi desenhada a partir do domínio, se os eventos foram instrumentados, se os alertas refletem condições de negócio, se a Matriz de Confiabilidade transformou dependências em KPIs, a organização consegue ver a jornada funcionando, ou não funcionando, com a granularidade necessária para agir.
 
-Um grupo que expira com pedidos não reconciliados não é apenas um bug. É uma violação de um comportamento que deveria ter sido protegido por um contrato. A observabilidade desenhada a partir do domínio permite identificar isso com precisão — não como um problema de infra, mas como um problema na jornada de Group Buying.
+Um grupo que expira com pedidos não reconciliados não é apenas um bug. É uma violação de um comportamento que deveria ter sido protegido por um contrato. A observabilidade desenhada a partir do domínio permite identificar isso com precisão, não como um problema de infra, mas como um problema na jornada de Group Buying.
 
 ## Por que observabilidade está no nome de ODD
 
@@ -46,7 +46,7 @@ Quando uma entidade foi identificada como protagonista dinâmica, com baixa tole
 
 ODD sem observabilidade em Runtime é uma teoria sem teste. Runtime sem o entendimento de ODD é reação sem contexto.
 
-A prova que Runtime oferece — a única prova que realmente importa — depende de que a pergunta sobre o que observar tenha sido respondida antes.
+A prova que Runtime oferece, a única prova que realmente importa, depende de que a pergunta sobre o que observar tenha sido respondida antes.
 
 ---
 

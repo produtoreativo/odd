@@ -1,4 +1,4 @@
-# Capítulo 9 — Onde termina um domínio?
+# Capítulo 9: Onde termina um domínio?
 
 Descobrir protagonistas não basta. Precisamos descobrir onde cada significado permanece válido.
 
@@ -24,17 +24,17 @@ Sem responsabilidade associada, um Bounded Context é apenas uma caixa no diagra
 
 Quando existem múltiplos Bounded Contexts, suas relações precisam ser explicitadas. DDD descreve padrões de relacionamento que ajudam a entender como os contextos cooperam, competem ou se isolam.
 
-Uma relação de **Customer/Supplier** existe quando um contexto depende do outro com contratos bem definidos — o consumidor adapta seu modelo ao que o fornecedor expõe. Uma **Anti-Corruption Layer** existe quando um contexto precisa isolar seu modelo da influência de outro contexto externo — ele traduz, sem se contaminar. **Separate Ways** significa que os contextos operam de forma completamente independente.
+Uma relação de **Customer/Supplier** existe quando um contexto depende do outro com contratos bem definidos, o consumidor adapta seu modelo ao que o fornecedor expõe. Uma **Anti-Corruption Layer** existe quando um contexto precisa isolar seu modelo da influência de outro contexto externo, ele traduz, sem se contaminar. **Separate Ways** significa que os contextos operam de forma completamente independente.
 
-Cada padrão tem implicações para o design, para os times e para a confiabilidade. Uma dependência direta entre contextos sem contrato explícito é uma dependência invisível — exatamente o tipo de dependência que ODD procura tornar visível.
+Cada padrão tem implicações para o design, para os times e para a confiabilidade. Uma dependência direta entre contextos sem contrato explícito é uma dependência invisível, exatamente o tipo de dependência que ODD procura tornar visível.
 
 ## Group Buying: fronteiras que emergem da jornada
 
 No Group Buying, diferentes partes da jornada possuem responsabilidades claramente distintas.
 
-O domínio de **catálogo** responde pela existência e pelos atributos do produto. O domínio de **oferta** responde pela elegibilidade e pelas condições da compra em grupo. O domínio de **grupo** responde pelo ciclo de vida do grupo — sua criação, adesões, expiração e encerramento. O domínio de **pedido** responde pela transação financeira. O domínio de **busca** responde pela indexação e pela descoberta.
+O domínio de **catálogo** responde pela existência e pelos atributos do produto. O domínio de **oferta** responde pela elegibilidade e pelas condições da compra em grupo. O domínio de **grupo** responde pelo ciclo de vida do grupo, sua criação, adesões, expiração e encerramento. O domínio de **pedido** responde pela transação financeira. O domínio de **busca** responde pela indexação e pela descoberta.
 
-Cada um desses domínios possui sua própria linguagem, suas próprias regras e seus próprios protagonistas. Quando uma mudança no grupo precisa se propagar para o motor de busca — para que o grupo indexado reflita o estado atual — existe uma dependência entre domínios que precisa ser gerenciada como um contrato, não como uma implementação improvisada.
+Cada um desses domínios possui sua própria linguagem, suas próprias regras e seus próprios protagonistas. Quando uma mudança no grupo precisa se propagar para o motor de busca, para que o grupo indexado reflita o estado atual, existe uma dependência entre domínios que precisa ser gerenciada como um contrato, não como uma implementação improvisada.
 
 ![Context Map do Group Buying mostrando os Bounded Contexts: Catalog, Shop Cart, Group Buying e Order Mgmt, com as entidades distribuídas por cada contexto](../images/cap09-context-mapping.png)
 
@@ -42,7 +42,7 @@ Cada um desses domínios possui sua própria linguagem, suas próprias regras e 
 
 ## Especialistas de domínio como guardiões do significado
 
-A descoberta de Bounded Contexts depende de pessoas que conhecem profundamente cada parte do negócio — especialistas de domínio, ou Subject Matter Experts.
+A descoberta de Bounded Contexts depende de pessoas que conhecem profundamente cada parte do negócio, especialistas de domínio, ou Subject Matter Experts.
 
 São eles que sabem onde uma palavra muda de significado. São eles que percebem quando uma regra de negócio está sendo violada por uma decisão técnica que parecia neutra. São eles que conseguem dizer, com autoridade, o que pode mudar dentro de um contexto sem afetar os outros.
 
@@ -52,7 +52,7 @@ ODD não funciona sem esse diálogo. A descoberta de fronteiras semânticas é, 
 
 Quando uma fronteira de domínio é estabelecida, a pergunta seguinte é natural: como os contextos se comunicam? O que um contexto pode esperar do outro? Em que condições essa expectativa é válida?
 
-Essas são as perguntas sobre contratos de domínio — o tema do Capítulo 11. Antes de chegar lá, precisamos entender o que diferencia entidades em termos de risco, porque é a natureza da mudança que determina o que o contrato precisa proteger.
+Essas são as perguntas sobre contratos de domínio, o tema do Capítulo 11. Antes de chegar lá, precisamos entender o que diferencia entidades em termos de risco, porque é a natureza da mudança que determina o que o contrato precisa proteger.
 
 ---
 
