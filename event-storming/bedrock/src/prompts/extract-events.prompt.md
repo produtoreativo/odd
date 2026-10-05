@@ -22,15 +22,12 @@ Regras:
 - não invente eventos implícitos
 - `candidateEvents.ordem` deve ser sequencial começando em 1
 - `stage` deve refletir o agrupamento de domínio/subdomínio do evento em slug curto
-- derive `service` no padrão `dominio.subdominio` sempre que houver evidência suficiente no touch point
+- derive `service` a partir do domínio de negócio quando não houver um serviço específico escrito/evidenciado na imagem
+- só use `service` no padrão `dominio.subdominio` quando o serviço específico estiver explícito na imagem; não derive serviço específico a partir do título do evento
 - derive `tags` com o padrão `touch_point:<slug>,business_domain:<slug>`
 - inclua `source_touch_point` quando souber qual touch point originou o evento
-- exemplos esperados:
-  - `Cobrança via Checkout` -> `stage: cobranca_checkout`, `service: cobranca.checkout`
-  - `Cadastro de Cliente` -> `stage: cliente_cadastro`, `service: cliente.cadastro`
-  - `Processamento de Pagamentos` -> `stage: pagamento_processamento`, `service: pagamento.processamento`
-  - `Fatura Criada` pode usar `Fatura`
-  - `Cliente Encontrado` e `Cliente Não Encontrado` devem usar `Cliente`
+- para `stage`, derive termos curtos a partir dos tokens mais informativos do touch point e do evento, sem copiar frases longas
+- exemplo de formato: `Processo de Revisão` pode virar `stage: processo_revisao`, `service: processo.revisao`
 - `description` nunca pode ser string vazia
 - `actor`, `service` e `tags` nunca podem ser string vazia
 - inclua nos nomes ou descrições dos fluxos a distinção entre fluxo principal e fluxo alternativo quando `flowsDetected` trouxer essa informação
@@ -58,7 +55,7 @@ Saída:
       "stage": "string",
       "actor": "string",
       "service": "string",
-      "tags": "touch_point:checkout,business_domain:payments",
+      "tags": "touch_point:<slug>,business_domain:<slug>",
       "source_touch_point": "string"
     }
   ],

@@ -7,12 +7,14 @@ import {
 } from './event-storming-schema.js';
 import { Logger } from '../shared/logger.js';
 import { slugify, unique } from '../shared/text.js';
+import { t } from '../shared/i18n.js';
 
 const logger = new Logger('context-normalizer');
 
 type NormalizationOptions = {
   inputImage?: string;
   env?: string;
+  explicitServices?: string[];
 };
 
 type ProjectMetadata = {
@@ -35,7 +37,7 @@ export function candidateContextToRecognizedContext(
   options: NormalizationOptions = {}
 ): RecognizedContext {
   const normalizedCandidateContext = normalizeCandidateContextDomainModels(candidateContext, options);
-  logger.info('Convertendo eventos candidatos em contexto reconhecido', {
+  logger.info(t('log.context.candidateToRecognized'), {
     candidateEventCount: normalizedCandidateContext.candidateEvents.length,
     candidateFlowCount: normalizedCandidateContext.candidateFlows.length
   });
@@ -49,7 +51,7 @@ export function candidateContextToRecognizedContext(
   return canonicalizeContext({
     recognizedFlows: normalizedCandidateContext.candidateFlows.map((flow) => ({
       name: flow.name,
-      description: flow.description.trim() || `Fluxo derivado de ${flow.name}.`,
+      description: flow.description.trim() || t('context.flowDerived', { name: flow.name }),
       stages: flow.stages.length > 0 ? flow.stages : normalizedFlowStages,
       actors: flow.actors.length > 0 ? flow.actors : ['system'],
       services: flow.services.length > 0 ? flow.services : unique(
@@ -74,7 +76,7 @@ export function candidateContextToRecognizedContext(
         event_title: event.event_title,
         stage: normalizeStage(event.stage || metadata.stage),
         actor: normalizeActor(event.actor || metadata.actor),
-        service: normalizeService(event.service || metadata.service),
+        service: resolveEventService(event.service, tagsAlignedWithSource, metadata, options),
         tags: tagsAlignedWithSource,
         dashboard_widget: 'event_stream',
         query_hint: '',
@@ -92,11 +94,11 @@ export function applyNormalizationReview(
   options: NormalizationOptions = {}
 ): RecognizedContext {
   if (!review) {
-    logger.warn('Nenhuma revisão fornecida; usando contexto determinístico derivado dos candidatos');
+    logger.warn(t('log.context.noReview'));
     return candidateContextToRecognizedContext(candidateContext, options);
   }
 
-  logger.info('Aplicando revisão de normalização', {
+  logger.info(t('log.context.applyReview'), {
     correctionCount: review.corrections.length,
     correctedFlowCount: review.correctedFlows.length
   });
@@ -146,7 +148,9 @@ export function imageObservationToCandidateContext(
   observation: ImageObservation,
   options: NormalizationOptions = {}
 ): CandidateContext {
-  logger.info('Convertendo observação da imagem em candidatos determinísticos', {
+  const normalizationOptions = withObservationServices(options, observation);
+
+  logger.info(t('log.context.imageToCandidates'), {
     touchPointCount: observation.touchPointsDetected.length,
     correlationCount: observation.touchPointEventCorrelations.length,
     detectedFlowCount: observation.flowsDetected.length
@@ -187,7 +191,7 @@ export function imageObservationToCandidateContext(
     sanitizedCorrelations,
     observedFlows
   );
-  const projectMetadata = deriveProjectMetadataFromObservation(observation, options);
+  const projectMetadata = deriveProjectMetadataFromObservation(observation, normalizationOptions);
 
   const flattenedEvents = eventOrder.map((eventTitle) => {
     const touchPoint = strongestTouchPointByEvent.get(eventTitle)
@@ -199,15 +203,16 @@ export function imageObservationToCandidateContext(
       touchPoint,
       projectMetadata.businessDomain
     );
+    const tags = buildTags({
+      touchPoint,
+      businessDomain: projectMetadata.businessDomain
+    });
     return {
       event_title: eventTitle,
       stage: metadata.stage,
       actor: inferActor(observation.actorsDetected),
-      service: metadata.service,
-      tags: buildTags({
-        touchPoint,
-        businessDomain: projectMetadata.businessDomain
-      }),
+      service: resolveEventService(metadata.service, tags, metadata, normalizationOptions),
+      tags,
       source_touch_point: touchPoint
     };
   });
@@ -238,7 +243,7 @@ export function imageObservationToCandidateContext(
         .filter((correlation) => correlation.eventsObservedAroundTouchPoint.length > 0)
         .map((correlation) => ({
           name: correlation.touchPointTitle.trim(),
-          description: correlation.reasoning.trim() || `Fluxo associado a ${correlation.touchPointTitle}.`,
+          description: correlation.reasoning.trim() || t('context.flowAssociated', { name: correlation.touchPointTitle }),
           orderedEventTitles: unique(correlation.eventsObservedAroundTouchPoint.map((item) => item.trim()).filter(Boolean)),
           stages: unique(
             unique(correlation.eventsObservedAroundTouchPoint.map((item) => item.trim()).filter(Boolean))
@@ -262,7 +267,7 @@ export function imageObservationToCandidateContext(
       : [
           {
             name: 'fluxo_reconhecido',
-            description: 'Fluxo derivado deterministicamente da observação da imagem.',
+            description: t('context.flowFromObservation'),
             orderedEventTitles: uniqueEvents.map((event) => event.event_title),
             stages: unique(uniqueEvents.map((event) => event.stage)),
             actors: [inferActor(observation.actorsDetected)],
@@ -273,7 +278,7 @@ export function imageObservationToCandidateContext(
     candidateEvents: uniqueEvents,
     discardedItems: observation.uncertainItems,
     assumptions: observation.assumptions
-  }, options);
+  }, normalizationOptions);
 }
 
 export function normalizeCandidateContextDomainModels(
@@ -292,7 +297,7 @@ export function normalizeCandidateContextDomainModels(
       ...event,
       stage: normalizeStage(event.stage || metadata.stage),
       actor: normalizeActor(event.actor || metadata.actor),
-      service: normalizeService(event.service || metadata.service),
+      service: resolveEventService(event.service, event.tags, metadata, options),
       tags: enforceTouchPointTag(mergePromptTags(event.tags, metadata.tags), metadata.sourceTouchPoint),
       source_touch_point: metadata.sourceTouchPoint
     };
@@ -326,7 +331,8 @@ export function enrichCandidateContextFromObservation(
   observation: ImageObservation,
   options: NormalizationOptions = {}
 ): CandidateContext {
-  const deterministicContext = imageObservationToCandidateContext(observation, options);
+  const normalizationOptions = withObservationServices(options, observation);
+  const deterministicContext = imageObservationToCandidateContext(observation, normalizationOptions);
   const deterministicEventByTitle = new Map(
     deterministicContext.candidateEvents.map((event) => [event.event_title, event])
   );
@@ -357,7 +363,7 @@ export function enrichCandidateContextFromObservation(
         source_touch_point: resolvedSourceTouchPoint
       };
     })
-  }, options);
+  }, normalizationOptions);
 }
 
 function buildObservedEventOrder(observedEvents: string[], flows: ImageObservation['flowsDetected']): string[] {
@@ -403,15 +409,15 @@ function buildCandidateFlowDescription(
   reasoning: string
 ): string {
   const flowTypeDescription = flowType === 'main'
-    ? 'Fluxo principal identificado por setas sólidas.'
+    ? t('context.flowMain')
     : flowType === 'alternate'
-      ? 'Fluxo alternativo identificado por setas tracejadas.'
-      : 'Fluxo identificado visualmente na imagem.';
+      ? t('context.flowAlternate')
+      : t('context.flowVisual');
   const arrowDescription = arrowStyle === 'solid'
-    ? 'Setas sólidas observadas.'
+    ? t('context.arrowSolid')
     : arrowStyle === 'dashed'
-      ? 'Setas tracejadas observadas.'
-      : 'Estilo de seta inconclusivo.';
+      ? t('context.arrowDashed')
+      : t('context.arrowUnknown');
   const normalizedReasoning = reasoning.trim();
 
   return normalizedReasoning === ''
@@ -422,11 +428,13 @@ function buildCandidateFlowDescription(
 function deriveDomainModelStage(eventTitle: string, contextualStage: string): string {
   const eventTokens = tokenize(eventTitle).filter((token) => !EVENT_NON_DOMAIN_TOKENS.has(token));
   const contextualTokens = tokenize(contextualStage).filter((token) => !CONTEXT_NON_DOMAIN_TOKENS.has(token));
-  const explicitStage = inferExplicitDomainStage(eventTokens) || inferExplicitDomainStage(contextualTokens);
-  if (explicitStage) {
-    return explicitStage;
-  }
-  const preferredTokens = eventTokens.length > 0 ? eventTokens : contextualTokens;
+  const eventTokenSet = new Set(eventTokens);
+  const sharedTokens = contextualTokens.filter((token) => eventTokenSet.has(token));
+  const preferredTokens = sharedTokens.length > 0
+    ? sharedTokens
+    : contextualTokens.length > 0
+      ? contextualTokens
+      : eventTokens;
 
   if (preferredTokens.length === 0) {
     return slugify(contextualStage);
@@ -435,16 +443,6 @@ function deriveDomainModelStage(eventTitle: string, contextualStage: string): st
   const canonicalTokens = preferredTokens.map(singularizeToken).filter(Boolean);
   const stage = canonicalTokens.slice(0, 2).join('_');
   return stage === '' ? slugify(contextualStage) : stage;
-}
-
-function inferExplicitDomainStage(tokens: string[]): string | undefined {
-  for (const domainToken of DOMAIN_STAGE_PRIORITY) {
-    if (tokens.includes(domainToken)) {
-      return domainToken;
-    }
-  }
-
-  return undefined;
 }
 
 function singularizeToken(token: string): string {
@@ -499,18 +497,7 @@ const EVENT_NON_DOMAIN_TOKENS = new Set([
   'criados'
 ]);
 
-const DOMAIN_STAGE_PRIORITY = [
-  'cliente',
-  'pagamento',
-  'fatura',
-  'cobranca'
-];
-
 const CONTEXT_NON_DOMAIN_TOKENS = new Set([
-  'via',
-  'checkout',
-  'cadastro',
-  'processamento',
   'de',
   'do',
   'da',
@@ -623,7 +610,7 @@ export function canonicalizeContext(
     : [
         {
           name: 'project_input',
-          description: 'Fluxo consolidado automaticamente a partir dos eventos reconhecidos.',
+          description: t('context.consolidatedFlow'),
           stages,
           services,
           actors,
@@ -650,7 +637,7 @@ function ensureFlowCoverage(
     return [
       {
         name: 'project_input',
-        description: 'Fluxo consolidado automaticamente a partir dos eventos reconhecidos.',
+        description: t('context.consolidatedFlow'),
         stages: coverage.stages,
         services: coverage.services,
         actors: coverage.actors,
@@ -763,13 +750,8 @@ function deriveSourceSheet(inputImage?: string): string {
 
 function inferBusinessDomain(values: string[], sourceSheet: string): string {
   const tokens = values.flatMap(tokenize);
-  if (tokens.some((token) => ['pagamento', 'cobranca', 'checkout', 'fatura', 'psp', 'payment'].includes(token))) {
-    return 'payments';
-  }
-  if (tokens.some((token) => ['cliente', 'customer', 'cadastro'].includes(token))) {
-    return 'customer';
-  }
-  return sourceSheet.replace(/^odd_/, '') || 'event_storming';
+  const domainToken = mostFrequentInformativeToken(tokens);
+  return domainToken || sourceSheet.replace(/^odd_/, '') || 'event_storming';
 }
 
 function buildEventMetadataByTitle(
@@ -814,6 +796,55 @@ function buildEventMetadata(
   };
 }
 
+function withObservationServices(options: NormalizationOptions, observation: ImageObservation): NormalizationOptions {
+  return {
+    ...options,
+    explicitServices: options.explicitServices ?? observation.servicesDetected
+  };
+}
+
+function resolveEventService(
+  proposedService: string,
+  tags: string,
+  metadata: Pick<EventMetadata, 'domain' | 'service'>,
+  options: NormalizationOptions
+): string {
+  const normalizedProposedService = normalizeService(proposedService);
+
+  if (!Array.isArray(options.explicitServices)) {
+    return normalizedProposedService || metadata.service;
+  }
+
+  if (hasExplicitServiceEvidence(normalizedProposedService, options.explicitServices)) {
+    return normalizedProposedService;
+  }
+
+  return normalizeService(extractTagValue(tags, 'business_domain') || metadata.domain);
+}
+
+function hasExplicitServiceEvidence(service: string, explicitServices: string[]): boolean {
+  if (!service) {
+    return false;
+  }
+
+  return explicitServices
+    .map(normalizeService)
+    .filter(Boolean)
+    .some((explicitService) => explicitService === service);
+}
+
+function extractTagValue(tags: string, key: string): string | undefined {
+  return tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .map((tag) => {
+      const [tagKey, ...valueParts] = tag.split(':');
+      return { key: tagKey, value: valueParts.join(':') };
+    })
+    .find((tag) => tag.key === key && tag.value.trim() !== '')
+    ?.value.trim();
+}
+
 function inferTouchPointFromCandidateContext(eventTitle: string, candidateContext: CandidateContext): string | undefined {
   for (const flow of candidateContext.candidateFlows) {
     if (flow.orderedEventTitles.includes(eventTitle)) {
@@ -838,9 +869,8 @@ function buildProjectMetadataFromTouchPoint(
 ): Pick<EventMetadata, 'domain' | 'subdomain' | 'stage' | 'service' | 'eventKeyBase'> {
   const touchPointTokens = tokenize(sourceTouchPoint).filter((token) => !TOUCH_POINT_NON_DOMAIN_TOKENS.has(token));
   const eventStage = deriveDomainModelStage(eventTitle, sourceTouchPoint);
-  const domain = inferExplicitDomainStage(touchPointTokens)
-    || inferExplicitDomainStage(tokenize(eventTitle))
-    || touchPointTokens[0]
+  const domain = touchPointTokens[0]
+    || mostFrequentInformativeToken(tokenize(eventTitle))
     || eventStage
     || 'event_storming';
   const subdomain = touchPointTokens.find((token) => token !== domain)
@@ -856,6 +886,22 @@ function buildProjectMetadataFromTouchPoint(
     service,
     eventKeyBase: buildEventKeyBase(businessDomain, service, eventTitle)
   };
+}
+
+function mostFrequentInformativeToken(tokens: string[]): string | undefined {
+  const frequencies = new Map<string, number>();
+  for (const token of tokens.map(singularizeToken)) {
+    if (token.length < 3 || EVENT_NON_DOMAIN_TOKENS.has(token) || CONTEXT_NON_DOMAIN_TOKENS.has(token)) {
+      continue;
+    }
+    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+  }
+
+  return [...frequencies.entries()]
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    })[0]?.[0];
 }
 
 function secondStageToken(stage: string): string | undefined {

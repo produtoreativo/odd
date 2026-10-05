@@ -24,19 +24,31 @@ export function routeFromStart(state: WorkflowGraphState) {
   return 'prepare_image_ocr';
 }
 
+export function routeAfterStep(stepName: keyof NonNullable<WorkflowGraphState['stepMetrics']>, nextStep: string) {
+  return (state: WorkflowGraphState) => {
+    const shouldEnd = state.endAt === stepName;
+    logger.info('Avaliando transição após step', {
+      stepName,
+      endAt: state.endAt,
+      shouldEnd,
+      nextStep
+    });
+
+    return shouldEnd ? END : nextStep;
+  };
+}
+
 export function routeAfterObservation(state: WorkflowGraphState) {
   const hasValidObservation = validateImageObservation(state.imageObservation).length === 0;
   logger.info('Avaliando transição após observação da imagem', {
-    observeAttempts: state.observeAttempts,
-    maxAttempts: state.maxAttempts,
     hasValidObservation
   });
 
+  if (state.endAt === 'validate_image_observation') {
+    return END;
+  }
   if (hasValidObservation) {
     return 'extract_events';
-  }
-  if (state.observeAttempts < state.maxAttempts) {
-    return 'observe_image';
   }
   return 'fail';
 }
@@ -49,6 +61,9 @@ export function routeAfterExtraction(state: WorkflowGraphState) {
     hasValidContext
   });
 
+  if (state.endAt === 'validate_candidate_events') {
+    return END;
+  }
   if (hasValidContext) {
     return 'normalize_context';
   }
@@ -66,6 +81,9 @@ export function routeAfterNormalization(state: WorkflowGraphState) {
     hasValidContext
   });
 
+  if (state.endAt === 'validate_normalization') {
+    return END;
+  }
   if (hasValidContext) {
     return 'create_workbook';
   }
